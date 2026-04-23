@@ -11,7 +11,7 @@ from db import (
 # [21.04.2026] User-Management Import
 from user_config import get_current_user, set_current_user, print_config_info
 
-# KI-Integration mit Fallback
+# KI-Integration mit Fallback 
 try:
     from test_gemini import therapy_cat_general_chat, therapy_cat_analyze_entry
     KI_AVAILABLE = True
@@ -40,21 +40,20 @@ class JournalApp(ctk.CTk):
         if not self.current_user:
             # User hat Login abgebrochen
             self.destroy()
-            return
+            return 
         
+        # aufbauen der UI wenn User vorhanden
         self.title("Journal App - Entries & Therapy Cat 🐱")
         self.geometry("900x620")
         self._maximize_window()
         self._build_ui()
 
+    # automatisch auf Größe des Geräts anpassen
     def _maximize_window(self) -> None:
         self.resizable(True, True)
-        try:
-            self.state("zoomed")
-        except Exception:
-            screen_w = self.winfo_screenwidth()
-            screen_h = self.winfo_screenheight()
-            self.geometry(f"{screen_w}x{screen_h}+0+0")
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        self.geometry(f"{screen_w}x{screen_h}+0+0")
 
     # [21.04.2026] Login-Dialog beim ersten Start
     def _show_login_dialog(self) -> None:

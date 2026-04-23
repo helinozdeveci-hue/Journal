@@ -1,8 +1,4 @@
 # [21.04.2026] User-Management und Config-Speicherung System
-"""
-Handles user authentication and local config management.
-Speichert User-Daten lokal für Offline-Nutzung mit Geräte-Erkennung.
-"""
 
 import json
 import os
@@ -17,12 +13,10 @@ CONFIG_FILE = APP_CONFIG_DIR / "config.json"
 
 # [21.04.2026] Geräte-ID generieren (MAC-Adresse basiert)
 def get_device_id() -> str:
-    """Generate unique device identifier based on MAC address"""
     return str(uuid.getnode())
 
 # [21.04.2026] Config laden oder erstellen
 def load_config() -> dict:
-    """Lade existierende Config oder erstelle neue"""
     if CONFIG_FILE.exists():
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
@@ -34,7 +28,6 @@ def load_config() -> dict:
 
 # [21.04.2026] Standard-Config erstellen
 def get_default_config() -> dict:
-    """Erstelle Standard-Config"""
     return {
         "version": "1.0",
         "username": None,
@@ -45,10 +38,10 @@ def get_default_config() -> dict:
 
 # [21.04.2026] Config speichern
 def save_config(config: dict) -> bool:
-    """Speichere Config in JSON-Datei"""
     try:
         config["last_login"] = datetime.now().isoformat()
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            # alle möglichen daten sollen in der config gespeichert werden
             json.dump(config, f, indent=2, ensure_ascii=False)
         return True
     except Exception as e:
@@ -57,25 +50,21 @@ def save_config(config: dict) -> bool:
 
 # [21.04.2026] User beim Start abrufen
 def get_current_user() -> str | None:
-    """Gib aktuellen User aus Config zurück"""
     config = load_config()
     return config.get("username")
 
 # [21.04.2026] User speichern
 def set_current_user(username: str) -> bool:
-    """Speichere aktuellen User in Config"""
     config = load_config()
     config["username"] = username
     return save_config(config)
 
 # [21.04.2026] Benutzer wechseln
 def switch_user(new_username: str) -> bool:
-    """Wechsle zu anderem User"""
     return set_current_user(new_username)
 
 # [21.04.2026] Config-Info anzeigen (für Debugging)
 def print_config_info():
-    """Zeige Config-Informationen"""
     config = load_config()
     print(f"\n{'='*50}")
     print(f"App Config Location: {CONFIG_FILE}")
