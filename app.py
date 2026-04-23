@@ -1,12 +1,10 @@
-#!/usr/bin/env python3
-"""Journal App - GUI mit Therapy Cat KI Integration"""
 
 from datetime import date, datetime
 import customtkinter as ctk
 from db import (
     create_entry, delete_entry, delete_entry_value, get_entry_with_values,
     init_db, list_entries, list_metrics, set_entry_value, update_entry,
-)
+    )
 from user_config import get_current_user, set_current_user, print_config_info
 from test_gemini import therapy_cat_general_chat, therapy_cat_analyze_entry
 
@@ -59,7 +57,7 @@ class JournalApp(ctk.CTk):
         ).pack(padx=20, pady=20)
         
         username_entry = ctk.CTkEntry(login_window, placeholder_text="Dein Name")
-        username_entry.pack(padx=20, pady=10, sticky="ew")
+        username_entry.pack(padx=20, pady=10, fill="x")        
         
         def confirm_login():
             username = username_entry.get().strip()
@@ -71,7 +69,7 @@ class JournalApp(ctk.CTk):
             else:
                 ctk.CTkLabel(login_window, text="Bitte gib einen Namen ein!", text_color="red").pack()
         
-        ctk.CTkButton(login_window, text="Bestätigen", command=confirm_login).pack(padx=20, pady=10, sticky="ew")
+        ctk.CTkButton(login_window, text="Bestätigen", command=confirm_login).pack(padx=20, pady=10, fill="x")
         
         # Focus und Enter-Key
         username_entry.focus()
