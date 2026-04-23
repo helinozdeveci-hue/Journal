@@ -353,7 +353,7 @@ if __name__ == "__main__":
     print("-" * 70)
     # Entkommentiere um zu testen (braucht Daten in DB):
     # response = therapy_cat_overview(created_by=user_name)
-    # print(f"Miau:\n{response}\n")
+    # print(f"Miausi:\n{response}\n")
     print("(Test aktivieren wenn Testdaten in DB vorhanden sind)")
     
     # ===== EXAMPLE 2: Analyse eines einzelnen Entry =====
@@ -365,7 +365,7 @@ if __name__ == "__main__":
     #     created_by="Alex",
     #     user_message="Wie habe ich mich damals gefühlt?"
     # )
-    # print(f"Miau:\n{response}\n")
+    # print(f"Miausi:\n{response}\n")
     print("(Test aktivieren: therapy_cat_analyze_entry(entry_id=1, created_by='Alex'))")
     
     # ===== EXAMPLE 3: Freier Chat mit der Katze =====
@@ -377,7 +377,7 @@ if __name__ == "__main__":
     #     created_by=user_name,
     #     user_message=chat_message
     # )
-    # print(f"Miau:\n{response}\n")
+    # print(f"Miausi:\n{response}\n")
     print("(Test aktivieren wenn Testdaten in DB vorhanden sind)")
     
     print("\n" + "=" * 70)

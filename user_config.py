@@ -1,4 +1,4 @@
-# [21.04.2026] User-Management und Config-Speicherung System
+# User-Management und Config-Speicherung System
 
 import json
 import os
@@ -6,16 +6,16 @@ from pathlib import Path
 from datetime import datetime
 import uuid
 
-# [21.04.2026] Config-Verzeichnis Setup
+# Config-Verzeichnis Setup
 APP_CONFIG_DIR = Path.home() / ".journalapp"
 APP_CONFIG_DIR.mkdir(exist_ok=True)
 CONFIG_FILE = APP_CONFIG_DIR / "config.json"
 
-# [21.04.2026] Geräte-ID generieren (MAC-Adresse basiert)
+# Geräte-ID generieren (MAC-Adresse basiert)
 def get_device_id() -> str:
     return str(uuid.getnode())
 
-# [21.04.2026] Config laden oder erstellen
+# Config laden oder erstellen
 def load_config() -> dict:
     if CONFIG_FILE.exists():
         try:
@@ -26,7 +26,7 @@ def load_config() -> dict:
             return get_default_config()
     return get_default_config()
 
-# [21.04.2026] Standard-Config erstellen
+# Standard-Config erstellen
 def get_default_config() -> dict:
     return {
         "version": "1.0",
@@ -36,7 +36,7 @@ def get_default_config() -> dict:
         "last_login": None,
     }
 
-# [21.04.2026] Config speichern
+# Config speichern
 def save_config(config: dict) -> bool:
     try:
         config["last_login"] = datetime.now().isoformat()
@@ -48,22 +48,22 @@ def save_config(config: dict) -> bool:
         print(f"Fehler beim Speichern der Config: {e}")
         return False
 
-# [21.04.2026] User beim Start abrufen
+# User beim Start abrufen
 def get_current_user() -> str | None:
     config = load_config()
     return config.get("username")
 
-# [21.04.2026] User speichern
+# User speichern
 def set_current_user(username: str) -> bool:
     config = load_config()
     config["username"] = username
     return save_config(config)
 
-# [21.04.2026] Benutzer wechseln
+# Benutzer wechseln
 def switch_user(new_username: str) -> bool:
     return set_current_user(new_username)
 
-# [21.04.2026] Config-Info anzeigen (für Debugging)
+# Config-Info anzeigen (für Debugging)
 def print_config_info():
     config = load_config()
     print(f"\n{'='*50}")
