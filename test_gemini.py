@@ -1,4 +1,9 @@
-#AIzaSyAxsamRhFettu1g30KLBpncTXSc12npjIg
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+api_key = os.getenv("GEMINI_API_KEY")
+
 from google import genai
 from google.genai import types
 from db import (
@@ -8,8 +13,7 @@ from db import (
 import json
 from datetime import date
 
-# Config
-API_KEY = "AIzaSyAxsamRhFettu1g30KLBpncTXSc12npjIg"
+
 MODEL = "gemini-3.1-flash-lite-preview"  # Model Name
 
 # Instructions for the Therapy Cat - this will be the system prompt for all interactions
@@ -62,7 +66,7 @@ Wenn schwere psychische Probleme erkannt werden (Depression > 4, Suizidgedanken 
 """
 
 # initialize Gemini client
-client = genai.Client(api_key=API_KEY)
+client = genai.Client(api_key=api_key)
 
 # 
 def format_user_entries(created_by: str) -> str:

@@ -1,21 +1,18 @@
-# User-Management und Config-Speicherung System
-
-import json
-import os
+import json 
+import os 
 from pathlib import Path
 from datetime import datetime
 import uuid
 
-# Config-Verzeichnis Setup
+from db import get_connection, register_user
+
 APP_CONFIG_DIR = Path.home() / ".journalapp"
 APP_CONFIG_DIR.mkdir(exist_ok=True)
 CONFIG_FILE = APP_CONFIG_DIR / "config.json"
 
-# Geräte-ID generieren (MAC-Adresse basiert)
 def get_device_id() -> str:
     return str(uuid.getnode())
 
-# Config laden oder erstellen
 def load_config() -> dict:
     if CONFIG_FILE.exists():
         try:
@@ -26,44 +23,56 @@ def load_config() -> dict:
             return get_default_config()
     return get_default_config()
 
-# Standard-Config erstellen
 def get_default_config() -> dict:
     return {
         "version": "1.0",
         "username": None,
         "device_id": get_device_id(),
         "created_at": datetime.now().isoformat(),
-        "last_login": None,
+        "last_login": None
     }
 
-# Config speichern
 def save_config(config: dict) -> bool:
     try:
         config["last_login"] = datetime.now().isoformat()
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            # alle möglichen daten sollen in der config gespeichert werden
             json.dump(config, f, indent=2, ensure_ascii=False)
         return True
     except Exception as e:
         print(f"Fehler beim Speichern der Config: {e}")
         return False
 
-# User beim Start abrufen
-def get_current_user() -> str | None:
+def get_saved_username() -> str | None:
     config = load_config()
     return config.get("username")
 
-# User speichern
-def set_current_user(username: str) -> bool:
+def save_username(username: str) -> bool:
     config = load_config()
     config["username"] = username
     return save_config(config)
 
-# Benutzer wechseln
-def switch_user(new_username: str) -> bool:
-    return set_current_user(new_username)
+def switch_user(new_username: str, pin: int) -> int | None:
+    return login_user(new_username, pin)
 
-# Config-Info anzeigen (für Debugging)
+def register_new_user(username: str, pin: int) -> bool:
+    return register_user(username, pin)
+
+def login_user(username: str, pin: int) -> int | None:
+    with get_connection() as conn:
+        result = conn.execute(
+            "SELECT id FROM users WHERE username = ? AND pin = ?",
+            (username, pin)
+        ).fetchone()
+    if result:
+        return result[0]
+    return None
+
+def device_id_known() -> bool:
+    config = load_config()
+    if config.get("device_id") == get_device_id():
+        return True
+    return False
+
 def print_config_info():
     config = load_config()
     print(f"\n{'='*50}")

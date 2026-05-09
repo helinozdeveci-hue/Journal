@@ -1,15 +1,16 @@
+from datetime import date, datetime # damit das Datum gespeichert werden kann
+import customtkinter as ctk # für die GUI
 
-from datetime import date, datetime
-import customtkinter as ctk
+# selbst erstellte Methoden importieren
 from db import (
     create_entry, delete_entry, delete_entry_value, get_entry_with_values,
     init_db, list_entries, list_metrics, set_entry_value, update_entry,
     )
-from user_config import get_current_user, set_current_user, print_config_info
+from user_config import get_current_user, set_current_user, print_config_info, switch_user, register_new_user, login_user, device_id_known, get_device_id, load_config, save_config
 from test_gemini import therapy_cat_general_chat, therapy_cat_analyze_entry
 
 
-class JournalApp(ctk.CTk):
+class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für die GUI
     def __init__(self) -> None:
         super().__init__()
         init_db()
@@ -52,13 +53,19 @@ class JournalApp(ctk.CTk):
         
         ctk.CTkLabel(
             login_window, 
-            text="Wer bist du?",
+            text="Gib deinen Username ein, um fortzufahren:",
             font=ctk.CTkFont(size=18, weight="bold")
         ).pack(padx=20, pady=20)
         
-        username_entry = ctk.CTkEntry(login_window, placeholder_text="Dein Name")
-        username_entry.pack(padx=20, pady=10, fill="x")        
-        
+        username_entry = ctk.CTkEntry(login_window, placeholder_text="Username")
+        username_entry.pack(padx=20, pady=10, fill="x")  
+
+        def check_device_id():
+            if device_id_known():
+                ctk.CTkLabel(login_window, text="Gerät erkannt!")
+                # wenn bekannt ist direkt einloggen mit gespeicherter MAC-Adresse und Username
+                # wenn unbekannt, Login oder Registrierung anbieten 
+
         def confirm_login():
             username = username_entry.get().strip()
             if username:
