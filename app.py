@@ -4,10 +4,10 @@ import customtkinter as ctk # für die GUI
 # selbst erstellte Methoden importieren
 from db import (
     create_entry, delete_entry, delete_entry_value, get_entry_with_values,
-    init_db, list_entries, list_metrics, set_entry_value, update_entry,
+    init_db, list_entries, list_metrics, set_entry_value, update_entry,update_username, register_user
     )
-from user_config import get_current_user, set_current_user, print_config_info, switch_user, register_new_user, login_user, device_id_known, get_device_id, load_config, save_config
-from test_gemini import therapy_cat_general_chat, therapy_cat_analyze_entry
+from user_config import print_config_info, login_user, register_new_user, get_saved_username, save_username
+from test_gemini import therapy_cat_general_chat
 
 
 class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für die GUI
@@ -16,13 +16,11 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
         init_db()
         
         # Lade oder frage nach User
-        self.current_user = get_current_user()
-        if not self.current_user:
-            self._show_login_dialog()
-        else:
-            print_config_info() 
+        self.current_user_id = None
+        self.current_username = None        
+        self._show_login_dialog()
         
-        if not self.current_user:
+        if not self.current_user_id:
             # User hat Login abgebrochen
             self.destroy()
             return 
@@ -44,37 +42,52 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
     def _show_login_dialog(self) -> None:
         login_window = ctk.CTkToplevel(self)
         login_window.title("Willkommen!")
-        login_window.geometry("400x200")
+        login_window.geometry("400x320")
         login_window.resizable(False, False)
-        
-        # fenster modal machen
         login_window.grab_set()
         login_window.focus()
-        
+
         ctk.CTkLabel(
-            login_window, 
-            text="Gib deinen Username ein, um fortzufahren:",
+            login_window,
+            text="Anmelden",
             font=ctk.CTkFont(size=18, weight="bold")
         ).pack(padx=20, pady=20)
-        
+ 
+        saved_username = get_saved_username()
         username_entry = ctk.CTkEntry(login_window, placeholder_text="Username")
-        username_entry.pack(padx=20, pady=10, fill="x")  
-
-        def check_device_id():
-            if device_id_known():
-                ctk.CTkLabel(login_window, text="Gerät erkannt!")
-                # wenn bekannt ist direkt einloggen mit gespeicherter MAC-Adresse und Username
-                # wenn unbekannt, Login oder Registrierung anbieten 
+        if saved_username:
+            username_entry.insert(0, saved_username)
+        username_entry.pack(padx=20, pady=10, fill="x")
+        pin_entry = ctk.CTkEntry(login_window, placeholder_text="PIN (4-stellig)", show="*")
+        pin_entry.pack(padx=20, pady=10, fill="x") 
+        status = ctk.CTkLabel(login_window, text="")
+        status.pack(padx=20)
 
         def confirm_login():
             username = username_entry.get().strip()
-            if username:
-                self.current_user = username
-                set_current_user(username)  
-                print_config_info() 
+            pin_text = pin_entry.get().strip()
+            if not username or not pin_text:
+                status.configure(text="Bitte Username und PIN eingeben!", text_color="red")
+                return
+            if not pin_text.isdigit():
+                status.configure(text="PIN muss eine Zahl sein!", text_color="red")
+                return
+            user_id = login_user(username, int(pin_text))
+            if user_id:
+                self.current_user_id = user_id
+                self.current_username = username
+                save_username(username)
+                print_config_info()
                 login_window.destroy()
             else:
-                ctk.CTkLabel(login_window, text="Bitte gib einen Namen ein!", text_color="red").pack()
+                status.configure(text="Falscher Username oder PIN!", text_color="red")
+ 
+
+        def open_register():
+            login_window.destroy()
+            self._show_register_dialog()
+
+        ctk.CTkButton(login_window, text="Registrieren", fg_color="gray", command=open_register).pack(padx=20, pady=5, fill="x")
         
         ctk.CTkButton(login_window, text="Bestätigen", command=confirm_login).pack(padx=20, pady=10, fill="x")
         
@@ -84,6 +97,57 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
         
         # Warte auf Bestätigung
         self.wait_window(login_window)
+
+    def _show_register_dialog(self) -> None:
+        reg_window = ctk.CTkToplevel(self)
+        reg_window.title("Registrieren")
+        reg_window.geometry("400x300")
+        reg_window.resizable(False, False)
+        reg_window.grab_set()
+        reg_window.focus()
+ 
+        ctk.CTkLabel(
+            reg_window,
+            text="Neuen Account erstellen",
+            font=ctk.CTkFont(size=18, weight="bold")
+        ).pack(padx=20, pady=20)
+ 
+        username_entry = ctk.CTkEntry(reg_window, placeholder_text="Username")
+        username_entry.pack(padx=20, pady=10, fill="x")
+ 
+        pin_entry = ctk.CTkEntry(reg_window, placeholder_text="PIN (4-stellig)", show="*")
+        pin_entry.pack(padx=20, pady=10, fill="x")
+ 
+        status = ctk.CTkLabel(reg_window, text="")
+        status.pack(padx=20)
+
+        def confirm_register():
+            username = username_entry.get().strip()
+            pin_text = pin_entry.get().strip()
+            if not username or not pin_text:
+                status.configure(text="Bitte alle Felder ausfüllen!", text_color="red")
+                return
+            if not pin_text.isdigit():
+                status.configure(text="PIN muss eine Zahl sein!", text_color="red")
+                return
+            pin = int(pin_text)
+            if not (1000 <= pin <= 9999):
+                status.configure(text="PIN muss 4-stellig sein!", text_color="red")
+                return
+            success = register_new_user(username, pin)
+            if success:
+                user_id = login_user(username, pin)
+                self.current_user_id = user_id
+                self.current_username = username
+                save_username(username)
+                reg_window.destroy()
+            else:
+                status.configure(text="Username bereits vergeben!", text_color="red")
+ 
+        ctk.CTkButton(reg_window, text="Registrieren", command=confirm_register).pack(padx=20, pady=10, fill="x")
+        username_entry.focus()
+        pin_entry.bind("<Return>", lambda e: confirm_register())
+        self.wait_window(reg_window)
 
     def _build_ui(self) -> None:
         self.grid_columnconfigure(0, weight=1)
@@ -101,7 +165,7 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
         btn_frame.grid(row=0, column=1, sticky="e")
         
         # [21.04.2026] User-Info Button mit Name-Änder-Option
-        ctk.CTkButton(btn_frame, text=f"👤 {self.current_user}", width=100, fg_color="#4A90E2",
+        ctk.CTkButton(btn_frame, text=f"👤 {self.current_username}", width=100, fg_color="#4A90E2",
                      command=self._change_username).pack(side="left", padx=4)
         ctk.CTkButton(btn_frame, text="🐱 KI Katze", width=120, fg_color="#FF6B6B",
                       command=self._open_cat_chat).pack(side="left", padx=4)
@@ -121,9 +185,9 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
     def _render_entries(self) -> None:
         for w in self.entries_frame.winfo_children():
             w.destroy()
-        entries = list_entries()
-        if not entries:
-            ctk.CTkLabel(self.entries_frame, text="Keine Entries vorhanden.").grid(row=0, column=0, padx=8, pady=8, sticky="w")
+            entries = list_entries(self.current_user_id)        
+            if not entries:
+                ctk.CTkLabel(self.entries_frame, text="Keine Entries vorhanden.").grid(row=0, column=0, padx=8, pady=8, sticky="w")
             return
 
         for idx, e in enumerate(entries):
@@ -152,35 +216,32 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
     def _change_username(self) -> None:
         dialog = ctk.CTkToplevel(self)
         dialog.title("Benutzername ändern")
-        dialog.geometry("400x200")
+        dialog.geometry("400x220")
         dialog.transient(self)
         dialog.grab_set()
-        
-        ctk.CTkLabel(dialog, text=f"Aktueller Benutzername: {self.current_user}", 
+ 
+        ctk.CTkLabel(dialog, text=f"Aktueller Benutzername: {self.current_username}",
                     font=ctk.CTkFont(weight="bold")).pack(padx=20, pady=20)
-        
         ctk.CTkLabel(dialog, text="Neuer Benutzername:").pack(padx=20, pady=(10, 5))
-        
+ 
         username_entry = ctk.CTkEntry(dialog, placeholder_text="Neuer Name")
-        username_entry.pack(padx=20, pady=5, sticky="ew")
+        username_entry.pack(padx=20, pady=5, fill="x")
+ 
+        status = ctk.CTkLabel(dialog, text="")
+        status.pack(padx=20)
         
         def change_username():
             new_username = username_entry.get().strip()
-            if new_username and new_username != self.current_user:
-                self.current_user = new_username
-                set_current_user(new_username)
+            if new_username and new_username != self.current_username:
+                success = update_username(self.current_user_id, new_username)
+                if success:
+                    self.current_username = new_username
+                    save_username(new_username)
+                    dialog.destroy()
+                    self._render_entries()
+                else:
+                    status.configure(text="Username bereits vergeben!", text_color="red")
 
-                # Aktualisiere Header und neuladen
-                dialog.destroy()
-                self._render_entries()
-                # Aktualisiere Button
-                for widget in self.winfo_children():
-                    if isinstance(widget, ctk.CTkFrame):
-                        for child in widget.winfo_children():
-                            if isinstance(child, ctk.CTkFrame):
-                                for btn in child.winfo_children():
-                                    if isinstance(btn, ctk.CTkButton) and "👤" in btn.cget("text"):
-                                        btn.configure(text=f"👤 {self.current_user}")
         
         ctk.CTkButton(dialog, text="Ändern", command=change_username).pack(padx=20, pady=10, sticky="ew")
         
@@ -223,7 +284,7 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
             dialog.update()
 
             try:
-                response = therapy_cat_general_chat(created_by=self.current_user, user_message=msg)
+                response = therapy_cat_general_chat(created_by=self.current_username, user_message=msg)
                 chat_display.configure(state="normal")
                 chat_display.insert("end", f"\nDU:\n{msg}\n\nMIAUSI:\n{response}\n{'='*50}\n")
                 chat_display.see("end")
@@ -247,7 +308,7 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
         send_btn.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
     def _open_detail(self, entry_id: int) -> None:
-        entry = get_entry_with_values(entry_id)
+        entry = get_entry_with_values(entry_id, self.current_user_id)
         if not entry:
             return
 
@@ -365,9 +426,9 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
             except ValueError:
                 return
 
-            author_val = author.get().strip() or self.current_user
+            author_val = author.get().strip() or self.current_username 
             note_val = note_box.get("1.0", "end").strip() or None
-            update_entry(entry_id, date=date_entry.get(), note=note_val, created_by=author_val)
+            update_entry(entry_id, date=date_entry.get(), note=note_val, created_by=author_val, user_id= self.current_user_id)
 
             for mid, var in vars.items():
                 if var.get() == "-":
@@ -414,7 +475,7 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
             except ValueError:
                 status.configure(text="Ungültiges Datum!", text_color="red")
                 return
-            author_val = author_e.get().strip() or self.current_user
+            author_val = author_e.get().strip() or self.current_username
             note_val = note_e.get("1.0", "end").strip() or None
             dialog.destroy()
             self._open_metrics_dialog(date_text, author_val, note_val)
@@ -455,7 +516,7 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
                 status.configure(text="Mindestens eine Metrik erforderlich!", text_color="red")
                 return
 
-            eid = create_entry(date_text, note=note, created_by=author)
+            eid = create_entry(date_text, note=note, created_by=author, user_id=self.current_user_id)
             for mid in selected:
                 set_entry_value(eid, mid, int(metric_values[mid].get()))
 
@@ -478,7 +539,7 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
         btns.pack(padx=14, pady=10, fill="x")
 
         def do_delete():
-            delete_entry(entry_id)
+            delete_entry(entry_id, self.current_user_id)
             self._render_entries()
             confirm.destroy()
             parent.destroy()

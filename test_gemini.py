@@ -7,10 +7,9 @@ api_key = os.getenv("GEMINI_API_KEY")
 from google import genai
 from google.genai import types
 from db import (
-    get_user_entries, get_entry_with_metrics, get_user_todays_metrics, 
-    get_user_metrics_raw_data, list_users, list_metrics
-)
-import json
+    list_entries, list_entry_values, get_todays_metrics, 
+    get_metrics_raw_data)
+
 from datetime import date
 
 
@@ -71,7 +70,7 @@ client = genai.Client(api_key=api_key)
 # 
 def format_user_entries(created_by: str) -> str:
     
-    entries = get_user_entries(created_by)
+    entries = list_entries(created_by)
     
     entries_text = f"""
 === ALLE JOURNAL-EINTRÄGE FÜR {created_by.upper()} ===
@@ -105,7 +104,7 @@ def format_single_entry(entry_id: int, created_by: str) -> str | None:
     Returns:
         Formatierter String mit Entry-Details, oder None wenn nicht gefunden
     """
-    entry = get_entry_with_metrics(entry_id, created_by=created_by)
+    entry = list_entry_values(entry_id, created_by=created_by)
     
     if not entry:
         return None
@@ -138,7 +137,7 @@ def format_user_metrics_today(created_by: str) -> str:
     Returns:
         Formatierter String mit heutigen Metriken
     """
-    todays_metrics = get_user_todays_metrics(created_by)
+    todays_metrics = get_todays_metrics(created_by)
     
     metrics_text = f"""
 === {created_by.upper()} - METRIKEN HEUTE ({date.today()}) ===
@@ -164,7 +163,7 @@ def format_user_metrics_trend(created_by: str, days: int = 30) -> str:
     Returns:
         Formatierter String mit Metrik-Trends
     """
-    metrics_raw = get_user_metrics_raw_data(created_by, days=days)
+    metrics_raw = get_metrics_raw_data(created_by, days=days)
     
     trend_text = f"""
 === {created_by.upper()} - METRIK TRENDS (letzte {days} Tage) ===
