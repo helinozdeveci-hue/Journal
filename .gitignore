@@ -1,8 +1,14 @@
-*
-!.gitignore
-!app.py
-!chat_interface.py
-!db.py
-!seed_metrics.py
-!test_gemini.py
-!user_config.py
+# Geheimnisse
+.env
+secrets.txt
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Datenbank
+*.db
+
+# Unwichtiger Ordner
+unwichtig/
