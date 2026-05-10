@@ -103,30 +103,6 @@ def list_entries(user_id: int, limit: int | None = None):
         cursor = conn.execute(sql, params)
         return [dict(row) for row in cursor.fetchall()]
     
-def list_entry_values(entry_id: int, user_id: int) -> dict | None:
-    with get_connection() as conn:
-        cursor = conn.execute("SELECT * FROM entries WHERE id = ? AND user_id = ?", (entry_id, user_id,))
-        entry_row = cursor.fetchone()
-        if entry_row is None:
-            return None
-        
-        cursor = conn.execute("""
-        SELECT 
-            ev.id as entry_value_id,
-            m.id as metric_id,
-            m.key as metric_key,
-            ev.value as metric_value,
-            u.id as user_id
-        FROM entry_values ev
-        JOIN metrics m ON m.id = ev.metric_id
-        JOIN entries e ON e.id = ev.entry_id
-        JOIN users u ON u.id = e.user_id
-        WHERE ev.entry_id = ? AND u.id = ?
-        """, (entry_id, user_id,))
-        value_rows = [dict(row) for row in cursor.fetchall()]
-        entry = dict(entry_row)
-        entry['values'] = value_rows
-        return entry
     
 def update_entry(entry_id: int, date: str, note: str | None = None, created_by: str | None = None, user_id: int | None = None) -> bool:
     all_updates = {"date": date, "note": note, "created_by": created_by}

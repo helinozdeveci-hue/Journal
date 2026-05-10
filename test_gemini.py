@@ -7,7 +7,7 @@ api_key = os.getenv("GEMINI_API_KEY")
 from google import genai
 from google.genai import types
 from db import (
-    list_entries, list_entry_values, get_todays_metrics, 
+    list_entries, get_entry_with_values, get_todays_metrics, 
     get_metrics_raw_data)
 
 from datetime import date
@@ -104,7 +104,7 @@ def format_single_entry(entry_id: int, created_by: str) -> str | None:
     Returns:
         Formatierter String mit Entry-Details, oder None wenn nicht gefunden
     """
-    entry = list_entry_values(entry_id, created_by=created_by)
+    entry = get_entry_with_values(entry_id, created_by=created_by)
     
     if not entry:
         return None

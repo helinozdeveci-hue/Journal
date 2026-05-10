@@ -185,6 +185,8 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
     def _render_entries(self) -> None:
         for w in self.entries_frame.winfo_children():
             w.destroy()
+            if not self.current_user_id:
+                return
             entries = list_entries(self.current_user_id)        
             if not entries:
                 ctk.CTkLabel(self.entries_frame, text="Keine Entries vorhanden.").grid(row=0, column=0, padx=8, pady=8, sticky="w")
