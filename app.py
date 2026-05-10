@@ -145,6 +145,7 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
                 status.configure(text="Username bereits vergeben!", text_color="red")
  
         ctk.CTkButton(reg_window, text="Registrieren", command=confirm_register).pack(padx=20, pady=10, fill="x")
+        ctk.CTkButton(reg_window, text="< Zurück zum Login", fg_color="gray", command=lambda: [reg_window.destroy(), self._show_login_dialog()]).pack(padx=20, pady=5, fill="x")
         username_entry.focus()
         pin_entry.bind("<Return>", lambda e: confirm_register())
         self.wait_window(reg_window)
