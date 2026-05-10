@@ -4,9 +4,9 @@ import customtkinter as ctk # für die GUI
 # selbst erstellte Methoden importieren
 from db import (
     create_entry, delete_entry, delete_entry_value, get_entry_with_values,
-    init_db, list_entries, list_metrics, set_entry_value, update_entry,update_username, register_user
+    init_db, list_entries, list_metrics, set_entry_value, update_entry,update_username
     )
-from user_config import print_config_info, login_user, register_new_user, get_saved_username, save_username
+from user_config import print_config_info, login_user, register_new_user, get_saved_username, save_config, save_username
 from test_gemini import therapy_cat_general_chat
 
 
@@ -165,11 +165,12 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
         btn_frame.grid(row=0, column=1, sticky="e")
         
         # [21.04.2026] User-Info Button mit Name-Änder-Option
-        ctk.CTkButton(btn_frame, text=f"👤 {self.current_username}", width=100, fg_color="#4A90E2",
-                     command=self._change_username).pack(side="left", padx=4)
-        ctk.CTkButton(btn_frame, text="🐱 KI Katze", width=120, fg_color="#FF6B6B",
+        self.user_btn = ctk.CTkButton(btn_frame, text=f"👤 {self.current_username}", width=100, fg_color="#0C6D31",command=self._change_username)
+        self.user_btn.pack(side="left", padx=4)
+        ctk.CTkButton(btn_frame, text="🐱 KI Katze", width=120, fg_color="#0C6D31",
                       command=self._open_cat_chat).pack(side="left", padx=4)
         ctk.CTkButton(btn_frame, text="+ Eintrag", command=self._open_add_dialog).pack(side="left", padx=4)
+        ctk.CTkButton(btn_frame, text="🔄 Logout", fg_color="#0C6D31", command=self._logout).pack(side="left", padx=4)
 
         # Entry Liste
         table_frame = ctk.CTkFrame(self)
@@ -224,10 +225,8 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
         ctk.CTkLabel(dialog, text=f"Aktueller Benutzername: {self.current_username}",
                     font=ctk.CTkFont(weight="bold")).pack(padx=20, pady=20)
         ctk.CTkLabel(dialog, text="Neuer Benutzername:").pack(padx=20, pady=(10, 5))
- 
         username_entry = ctk.CTkEntry(dialog, placeholder_text="Neuer Name")
         username_entry.pack(padx=20, pady=5, fill="x")
- 
         status = ctk.CTkLabel(dialog, text="")
         status.pack(padx=20)
         
@@ -238,14 +237,14 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
                 if success:
                     self.current_username = new_username
                     save_username(new_username)
+                    self.user_btn.configure(text=f"👤 {new_username}")
                     dialog.destroy()
                     self._render_entries()
+                    
                 else:
                     status.configure(text="Username bereits vergeben!", text_color="red")
-
         
-        ctk.CTkButton(dialog, text="Ändern", command=change_username).pack(padx=20, pady=10, sticky="ew")
-        
+        ctk.CTkButton(dialog, text="Ändern", command=change_username).pack(padx=20, pady=10, fill="x")
         username_entry.focus()
         username_entry.bind("<Return>", lambda e: change_username())
 
@@ -308,6 +307,8 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
         send_btn = ctk.CTkButton(input_frame, text="Senden", command=send, height=40)
         send_btn.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
+    
+
     def _open_detail(self, entry_id: int) -> None:
         entry = get_entry_with_values(entry_id, self.current_user_id)
         if not entry:
@@ -365,7 +366,7 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
 
     # eintrag bearbeiten
     def _open_edit(self, parent: ctk.CTkToplevel, entry_id: int) -> None:
-        entry = get_entry_with_values(entry_id)
+        entry = get_entry_with_values(entry_id, self.current_user_id)
         if not entry:
             return
 
@@ -437,7 +438,7 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
                 else:
                     set_entry_value(entry_id, mid, int(var.get()))
 
-            self._render_entries()
+            self._open_detail(entry_id)
             dialog.destroy()
             parent.destroy()
 
@@ -487,7 +488,6 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
     def _open_metrics_dialog(self, date_text: str, author: str | None, note: str | None) -> None:
         metrics = list_metrics()
         metric_values = {}
-
         dialog = ctk.CTkToplevel(self)
         dialog.title("Metriken und Werte")
         dialog.geometry("520x500")
@@ -548,6 +548,13 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
         ctk.CTkButton(btns, text="Abbrechen", command=confirm.destroy).pack(side="left", expand=True, fill="x", padx=2)
         ctk.CTkButton(btns, text="Löschen", fg_color="red", command=do_delete).pack(side="left", expand=True, fill="x", padx=2)
 
+    def _logout(self) -> None:
+        self.current_user_id = None
+        self.current_username = None
+        save_config({"username": None})  
+        self.destroy()
+        app = JournalApp()
+        app.mainloop()
 
 # Entry Point der Anwendung mit User-Authentification
 if __name__ == "__main__":
