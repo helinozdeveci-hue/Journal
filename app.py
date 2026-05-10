@@ -185,11 +185,11 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
     def _render_entries(self) -> None:
         for w in self.entries_frame.winfo_children():
             w.destroy()
-            if not self.current_user_id:
-                return
-            entries = list_entries(self.current_user_id)        
-            if not entries:
-                ctk.CTkLabel(self.entries_frame, text="Keine Entries vorhanden.").grid(row=0, column=0, padx=8, pady=8, sticky="w")
+        if not self.current_user_id:
+            return
+        entries = list_entries(self.current_user_id)        
+        if not entries:
+            ctk.CTkLabel(self.entries_frame, text="Keine Entries vorhanden.").grid(row=0, column=0, padx=8, pady=8, sticky="w")
             return
 
         for idx, e in enumerate(entries):
@@ -221,7 +221,6 @@ class JournalApp(ctk.CTk): # Hauptklasse der Anwendung, erbt von ctk.CTk für di
         dialog.geometry("400x220")
         dialog.transient(self)
         dialog.grab_set()
- 
         ctk.CTkLabel(dialog, text=f"Aktueller Benutzername: {self.current_username}",
                     font=ctk.CTkFont(weight="bold")).pack(padx=20, pady=20)
         ctk.CTkLabel(dialog, text="Neuer Benutzername:").pack(padx=20, pady=(10, 5))
