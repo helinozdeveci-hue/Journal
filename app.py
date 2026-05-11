@@ -443,20 +443,21 @@ class JournalApp(ctk.CTk):
 
             author_val = author.get().strip() or self.current_username # author ist created_by oder username
             note_val = note_box.get("1.0", "end").strip() or None
-            update_entry(entry_id, date=date_entry.get(), note=note_val, created_by=author_val, user_id= self.current_user_id)
+            update_entry(entry_id, date=date_entry.get(), note=note_val, created_by=author_val, user_id= self.current_user_id) # alle neuen werte werden gespeichert
 
             for mid, var in vars.items():
                 if var.get() == "-":
-                    delete_entry_value(entry_id, mid)
+                    delete_entry_value(entry_id, mid) # wenn eine Metrik den wert "-" hat, nicht speichern/Löschen
                 else:
-                    set_entry_value(entry_id, mid, int(var.get()))
+                    set_entry_value(entry_id, mid, int(var.get())) # neuen wert speichern
 
-            self._open_detail(entry_id)
+            self._open_detail(entry_id) # zurück zum detail fenster dieses Eintrags
             dialog.destroy()
             parent.destroy()
 
-        ctk.CTkButton(dialog, text="Speichern", command=save, height=40).grid(row=4, column=0, padx=14, pady=14, sticky="ew")
+        ctk.CTkButton(dialog, text="Speichern", command=save, height=40).grid(row=4, column=0, padx=14, pady=14, sticky="ew") # Button zum speichern
 
+    # neuen Eintrag anlegen
     def _open_add_dialog(self) -> None:
         dialog = ctk.CTkToplevel(self)
         dialog.title("Neuen Entry anlegen")
@@ -469,13 +470,15 @@ class JournalApp(ctk.CTk):
 
         ctk.CTkLabel(dialog, text="Datum").grid(row=1, column=0, padx=14, sticky="w")
         date_e = ctk.CTkEntry(dialog)
-        date_e.insert(0, date.today().isoformat())
+        date_e.insert(0, date.today().isoformat()) # vorab eintrag des heutigen Datums
         date_e.grid(row=1, column=1, padx=14, sticky="ew")
 
+        # ersteller selbst vermerken
         ctk.CTkLabel(dialog, text="Erstellt von").grid(row=2, column=0, padx=14, sticky="w", pady=4)
         author_e = ctk.CTkEntry(dialog)
         author_e.grid(row=2, column=1, padx=14, sticky="ew", pady=4)
 
+        # notiz vermerken
         ctk.CTkLabel(dialog, text="Notiz").grid(row=3, column=0, padx=14, sticky="nw", pady=4)
         note_e = ctk.CTkTextbox(dialog, height=100)
         note_e.grid(row=3, column=1, padx=14, sticky="ew", pady=4)
@@ -484,14 +487,14 @@ class JournalApp(ctk.CTk):
         status.grid(row=4, column=0, columnspan=2, padx=14, sticky="w")
 
         def next_step():
-            date_text = date_e.get().strip()
+            date_text = date_e.get().strip() 
             try:
-                datetime.strptime(date_text, "%Y-%m-%d")
+                datetime.strptime(date_text, "%Y-%m-%d") 
             except ValueError:
                 status.configure(text="Ungültiges Datum!", text_color="red")
-                return
-            author_val = author_e.get().strip() or self.current_username
-            note_val = note_e.get("1.0", "end").strip() or None
+                return # prüfung des Datums
+            author_val = author_e.get().strip() or self.current_username # Prüfung des erstellers
+            note_val = note_e.get("1.0", "end").strip() or None # prüfung notiz
             dialog.destroy()
             self._open_metrics_dialog(date_text, author_val, note_val)
 
