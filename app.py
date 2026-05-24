@@ -1,36 +1,35 @@
+from datetime import date, datetime # damit das Datum gespeichert werden kann
+import customtkinter as ctk # für die GUI
 
-from datetime import date, datetime
-import customtkinter as ctk
+# selbst erstellte Methoden importieren
 from db import (
     create_entry, delete_entry, delete_entry_value, get_entry_with_values,
-    init_db, list_entries, list_metrics, set_entry_value, update_entry,
+    init_db, list_entries, list_metrics, set_entry_value, update_entry,update_username
     )
-from user_config import get_current_user, set_current_user, print_config_info
-from test_gemini import therapy_cat_general_chat, therapy_cat_analyze_entry
+from user_config import print_config_info, login_user, register_new_user, get_saved_username, save_config, save_username
+from test_gemini import therapy_cat_general_chat
 
-
-class JournalApp(ctk.CTk):
+# Hauptklasse der Anwendung, erbt von ctk.CTk für die GUI
+class JournalApp(ctk.CTk): 
     def __init__(self) -> None:
         super().__init__()
         init_db()
         
-        # Lade oder frage nach User
-        self.current_user = get_current_user()
-        if not self.current_user:
-            self._show_login_dialog()
-        else:
-            print_config_info() 
+        # werte haben keinen wert, damit sie nach dem Login gesetzt werden können
+        self.current_user_id = None
+        self.current_username = None        
+        self._show_login_dialog()
         
-        if not self.current_user:
-            # User hat Login abgebrochen
-            self.destroy()
+        # wenn der Login-Dialog geschlossen wurde ohne Einloggen, Fenster schließen
+        if not self.current_user_id:
+            self.destroy() # User hat Login abgebrochen
             return 
         
         # aufbauen der UI wenn User vorhanden
         self.title("Journal App - Entries & Therapy Cat 🐱")
         self.geometry("900x620")
         self._maximize_window()
-        self._build_ui()
+        self._build_ui() # aufruf der Methode zum Aufbau der UI-Elemente
 
     # automatisch auf Größe des Geräts anpassen
     def _maximize_window(self) -> None:
@@ -40,36 +39,59 @@ class JournalApp(ctk.CTk):
         self.geometry(f"{screen_w}x{screen_h}+0+0")
 
     # Login-Dialog beim ersten Start
+    # Login nur möglich, wenn bereits Registriert
     def _show_login_dialog(self) -> None:
         login_window = ctk.CTkToplevel(self)
         login_window.title("Willkommen!")
-        login_window.geometry("400x200")
+        login_window.geometry("400x320")
         login_window.resizable(False, False)
-        
-        # fenster modal machen
-        login_window.grab_set()
+        login_window.grab_set() # blockiert Interaktion mit dem Hauptfenster solange der Dialog offen ist
         login_window.focus()
-        
+
         ctk.CTkLabel(
-            login_window, 
-            text="Wer bist du?",
+            login_window,
+            text="Anmelden",
             font=ctk.CTkFont(size=18, weight="bold")
         ).pack(padx=20, pady=20)
-        
-        username_entry = ctk.CTkEntry(login_window, placeholder_text="Dein Name")
-        username_entry.pack(padx=20, pady=10, fill="x")        
-        
+ 
+        saved_username = get_saved_username() # zuletzt verwendeten Benutzernamen laden, wenn vorhanden
+        username_entry = ctk.CTkEntry(login_window, placeholder_text="Username") # platzhalter
+        if saved_username:
+            username_entry.insert(0, saved_username) # gespeicherten Namen direkt eintragen
+        username_entry.pack(padx=20, pady=10, fill="x")
+        pin_entry = ctk.CTkEntry(login_window, placeholder_text="PIN (4-stellig)", show="*") # platzhalter
+        pin_entry.pack(padx=20, pady=10, fill="x") 
+        status = ctk.CTkLabel(login_window, text="")
+        status.pack(padx=20)
+
+        # Login bestätigen
         def confirm_login():
-            username = username_entry.get().strip()
-            if username:
-                self.current_user = username
-                set_current_user(username)  
-                print_config_info() 
+            username = username_entry.get().strip() # username ohne Leerzeichen
+            pin_text = pin_entry.get().strip() # pin ohne Leerzeichen
+            if not username or not pin_text:
+                status.configure(text="Bitte Username und PIN eingeben!", text_color="red")
+                return
+            if not pin_text.isdigit():
+                status.configure(text="PIN muss eine Zahl sein!", text_color="red")
+                return
+            user_id = login_user(username, int(pin_text)) # wenn pin und username korrekt, wird die user_id zurückgegeben
+            # wenn user_id vorhanden, dann Login erfolgreich, sonst Fehlermeldung
+            if user_id:
+                self.current_user_id = user_id
+                self.current_username = username
+                save_username(username) # username für nächsten Start speichern
+                print_config_info()
                 login_window.destroy()
             else:
-                ctk.CTkLabel(login_window, text="Bitte gib einen Namen ein!", text_color="red").pack()
-        
-        ctk.CTkButton(login_window, text="Bestätigen", command=confirm_login).pack(padx=20, pady=10, fill="x")
+                status.configure(text="Falscher Username oder PIN!", text_color="red")
+
+        # Registrieren Button öffnet den Registrierungsdialog
+        def open_register():
+            login_window.destroy()
+            self._show_register_dialog()
+
+        ctk.CTkButton(login_window, text="Registrieren", fg_color="gray", command=open_register).pack(padx=20, pady=5, fill="x")       
+        ctk.CTkButton(login_window, text="Bestätigen", command=confirm_login).pack(padx=20, pady=10, fill="x") 
         
         # Focus und Enter-Key
         username_entry.focus()
@@ -78,7 +100,64 @@ class JournalApp(ctk.CTk):
         # Warte auf Bestätigung
         self.wait_window(login_window)
 
+    # Registrierungsdialog für neue Benutzer
+    def _show_register_dialog(self) -> None:
+        reg_window = ctk.CTkToplevel(self)
+        reg_window.title("Registrieren")
+        reg_window.geometry("400x300")
+        reg_window.resizable(False, False)
+        reg_window.grab_set()
+        reg_window.focus()
+ 
+        ctk.CTkLabel(
+            reg_window,
+            text="Neuen Account erstellen",
+            font=ctk.CTkFont(size=18, weight="bold")
+        ).pack(padx=20, pady=20)
+ 
+        username_entry = ctk.CTkEntry(reg_window, placeholder_text="Username") # hier wird der Benutzername eingegeben, der später zum Login verwendet wird
+        username_entry.pack(padx=20, pady=10, fill="x")
+ 
+        pin_entry = ctk.CTkEntry(reg_window, placeholder_text="PIN (4-stellig)", show="*") # hier wird die PIN eingegeben, die später zum Login verwendet wird
+        pin_entry.pack(padx=20, pady=10, fill="x")
+ 
+        status = ctk.CTkLabel(reg_window, text="")
+        status.pack(padx=20)
+
+        # Registrierung bestätigen
+        def confirm_register():
+            username = username_entry.get().strip()
+            pin_text = pin_entry.get().strip()
+            if not username or not pin_text:
+                status.configure(text="Bitte alle Felder ausfüllen!", text_color="red")
+                return
+            if not pin_text.isdigit():
+                status.configure(text="PIN muss eine Zahl sein!", text_color="red")
+                return
+            pin = int(pin_text)
+            if not (1000 <= pin <= 9999):
+                status.configure(text="PIN muss 4-stellig sein!", text_color="red")
+                return
+            success = register_new_user(username, pin) # success bekommt Registrier Daten zurück
+            if success:
+                # nach erfolgreicher Registrierung direkt einloggen
+                user_id = login_user(username, pin)
+                self.current_user_id = user_id
+                self.current_username = username
+                save_username(username)
+                reg_window.destroy()
+            else:
+                status.configure(text="Username bereits vergeben!", text_color="red")
+ 
+        ctk.CTkButton(reg_window, text="Registrieren", command=confirm_register).pack(padx=20, pady=10, fill="x") # Registrierungsbutton
+        ctk.CTkButton(reg_window, text="< Zurück zum Login", fg_color="gray", command=lambda: [reg_window.destroy(), self._show_login_dialog()]).pack(padx=20, pady=5, fill="x") # zurück zu Login Button
+        username_entry.focus()
+        pin_entry.bind("<Return>", lambda e: confirm_register())
+        self.wait_window(reg_window)
+
+    # Desktop App wird hier aufgebaut, nachdem der Benutzer eingeloggt ist
     def _build_ui(self) -> None:
+        # Spalte 0 dehnt sich mit dem Fenster, Zeile 1 nimmt den restlichen Platz ein
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
@@ -92,35 +171,40 @@ class JournalApp(ctk.CTk):
 
         btn_frame = ctk.CTkFrame(header, fg_color="transparent")
         btn_frame.grid(row=0, column=1, sticky="e")
-        
-        # [21.04.2026] User-Info Button mit Name-Änder-Option
-        ctk.CTkButton(btn_frame, text=f"👤 {self.current_user}", width=100, fg_color="#4A90E2",
-                     command=self._change_username).pack(side="left", padx=4)
-        ctk.CTkButton(btn_frame, text="🐱 KI Katze", width=120, fg_color="#FF6B6B",
-                      command=self._open_cat_chat).pack(side="left", padx=4)
-        ctk.CTkButton(btn_frame, text="+ Eintrag", command=self._open_add_dialog).pack(side="left", padx=4)
+        self.user_btn = ctk.CTkButton(btn_frame, text=f"👤 {self.current_username}", width=100, fg_color="#0C6D31",command=self._change_username)
+        self.user_btn.pack(side="left", padx=4) # anzeige Username mit Möglichkeit zur Änderung
+        ctk.CTkButton(btn_frame, text="🐱 KI Katze", width=120, fg_color="#0C6D31",
+                      command=self._open_cat_chat).pack(side="left", padx=4) # Miausi, die Therapie-Katze, öffnet einen Chat Dialog
+        ctk.CTkButton(btn_frame, text="+ Eintrag", fg_color="#0C6D31",command=self._open_add_dialog).pack(side="left", padx=4) # Button zum Anlegen eines neuen Eintrags
+        ctk.CTkButton(btn_frame, text="🔄 Logout", fg_color="#0C6D31", command=self._logout).pack(side="left", padx=4) #  Button zum Logout
 
-        # Entry Liste
+        # Entry Liste Design
         table_frame = ctk.CTkFrame(self)
         table_frame.grid(row=1, column=0, padx=16, pady=(8, 16), sticky="nsew")
         table_frame.grid_rowconfigure(0, weight=1)
         table_frame.grid_columnconfigure(0, weight=1)
 
+        # scrollbarer Bereich für alle Einträge
         self.entries_frame = ctk.CTkScrollableFrame(table_frame)
         self.entries_frame.grid(row=0, column=0, padx=12, pady=12, sticky="nsew")
         self.entries_frame.grid_columnconfigure(0,weight=1)
         self._render_entries()
 
+    # anzeige der Einträge
     def _render_entries(self) -> None:
+        # zuerst alle alten Widgets löschen, bevor neu gerendert wird
         for w in self.entries_frame.winfo_children():
             w.destroy()
-        entries = list_entries()
+        if not self.current_user_id:
+            return
+        entries = list_entries(self.current_user_id) # nur einträge des Nutzers     
         if not entries:
             ctk.CTkLabel(self.entries_frame, text="Keine Entries vorhanden.").grid(row=0, column=0, padx=8, pady=8, sticky="w")
             return
 
+            # auflistung der Einträge mit Datum, Notiz und Ersteller
         for idx, e in enumerate(entries):
-            note = (e.get("note") or "").replace("\n", " ")[:50]
+            note = (e.get("note") or "").replace("\n", " ")[:50] # Zeilenumbrüche entfernen und auf 50 Zeichen kürzen
             author = e.get("created_by") or "-"
             row = ctk.CTkFrame(self.entries_frame, fg_color="transparent")
             row.grid(row=idx, column=0, padx=8, pady=6, sticky="ew")
@@ -129,7 +213,7 @@ class JournalApp(ctk.CTk):
             card = ctk.CTkFrame(row, height=100)
             card.grid(row=0, column=0, sticky="ew")
             card.grid_columnconfigure(0, weight=1)
-            card.grid_propagate(False)
+            card.grid_propagate(False) # Karte behält feste Höhe, unabhängig vom Inhalt
 
             info = f"#{e['id']} | {e['date']} | {author}"
             ctk.CTkLabel(card, text=info, font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, padx=12, pady=(10, 4), sticky="w")
@@ -138,48 +222,44 @@ class JournalApp(ctk.CTk):
 
             btns = ctk.CTkFrame(card, fg_color="transparent")
             btns.grid(row=0, column=1, rowspan=2, padx=12, sticky="e")
-            ctk.CTkButton(btns, text="✏️", width=32,
-                         command=lambda eid=e['id']: self._open_detail(eid)).pack(side="left", padx=2)
+            ctk.CTkButton(btns, text="✏️",fg_color="#0C6D31" ,width=32,
+                         command=lambda eid=e['id']: self._open_detail(eid)).pack(side="left", padx=2) # button zum öffnen der Detailansicht eines Eintrags
 
     # Benutzername-Änder Dialog
     def _change_username(self) -> None:
         dialog = ctk.CTkToplevel(self)
         dialog.title("Benutzername ändern")
-        dialog.geometry("400x200")
+        dialog.geometry("400x220")
         dialog.transient(self)
         dialog.grab_set()
-        
-        ctk.CTkLabel(dialog, text=f"Aktueller Benutzername: {self.current_user}", 
+        ctk.CTkLabel(dialog, text=f"Aktueller Benutzername: {self.current_username}",
                     font=ctk.CTkFont(weight="bold")).pack(padx=20, pady=20)
-        
         ctk.CTkLabel(dialog, text="Neuer Benutzername:").pack(padx=20, pady=(10, 5))
+        username_entry = ctk.CTkEntry(dialog, placeholder_text="Neuer Name") # Platzhalter für neuen Namen
+        username_entry.pack(padx=20, pady=5, fill="x")
+        status = ctk.CTkLabel(dialog, text="")
+        status.pack(padx=20)
         
-        username_entry = ctk.CTkEntry(dialog, placeholder_text="Neuer Name")
-        username_entry.pack(padx=20, pady=5, sticky="ew")
-        
+        # speichern der Änderung, wenn der neue Name gültig ist und nicht bereits vergeben
         def change_username():
             new_username = username_entry.get().strip()
-            if new_username and new_username != self.current_user:
-                self.current_user = new_username
-                set_current_user(new_username)
-
-                # Aktualisiere Header und neuladen
-                dialog.destroy()
-                self._render_entries()
-                # Aktualisiere Button
-                for widget in self.winfo_children():
-                    if isinstance(widget, ctk.CTkFrame):
-                        for child in widget.winfo_children():
-                            if isinstance(child, ctk.CTkFrame):
-                                for btn in child.winfo_children():
-                                    if isinstance(btn, ctk.CTkButton) and "👤" in btn.cget("text"):
-                                        btn.configure(text=f"👤 {self.current_user}")
+            if new_username and new_username != self.current_username:
+                success = update_username(self.current_user_id, new_username)
+                if success:
+                    self.current_username = new_username
+                    save_username(new_username) # neuen Namen in Konfigurationsdatei speichern
+                    self.user_btn.configure(text=f"👤 {new_username}") # Header-Button aktualisieren
+                    dialog.destroy()
+                    self._render_entries()
+                    
+                else:
+                    status.configure(text="Username bereits vergeben!", text_color="red")
         
-        ctk.CTkButton(dialog, text="Ändern", command=change_username).pack(padx=20, pady=10, sticky="ew")
-        
+        ctk.CTkButton(dialog, text="Ändern", command=change_username).pack(padx=20, pady=10, fill="x") # Button zum Bestätigen der Namensänderung
         username_entry.focus()
         username_entry.bind("<Return>", lambda e: change_username())
 
+    # Therapie-Katzen Chat öffnen
     def _open_cat_chat(self) -> None:
         dialog = ctk.CTkToplevel(self)
         dialog.title("Chat mit Miausi 🐱")
@@ -192,7 +272,8 @@ class JournalApp(ctk.CTk):
         ctk.CTkLabel(dialog, text="Sprich mit Miausi - deiner Therapie-Katze",
                     font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, padx=14, pady=14)
 
-        chat_display = ctk.CTkTextbox(dialog, state="disabled")
+        # aussehen chat mit eingabefeld
+        chat_display = ctk.CTkTextbox(dialog, state="disabled") # schreibgeschützt, nur Anzeige
         chat_display.grid(row=1, column=0, padx=14, sticky="nsew")
 
         input_frame = ctk.CTkFrame(dialog)
@@ -205,10 +286,12 @@ class JournalApp(ctk.CTk):
         status = ctk.CTkLabel(input_frame, text="")
         status.grid(row=1, column=0, sticky="w")
 
+        # Nachricht senden und Antwort von Miausi erhalten
         def send():
             msg = user_input.get("1.0", "end").strip()
             if not msg:
                 return
+            # Eingabe sperren während auf Antwort gewartet wird
             user_input.configure(state="disabled")
             send_btn.configure(state="disabled")
             status.configure(text="Miausi überlegt...", text_color="gray")
@@ -216,34 +299,38 @@ class JournalApp(ctk.CTk):
             dialog.update()
 
             try:
-                response = therapy_cat_general_chat(created_by=self.current_user, user_message=msg)
+                response = therapy_cat_general_chat(created_by=self.current_username, user_message=msg)
                 chat_display.configure(state="normal")
                 chat_display.insert("end", f"\nDU:\n{msg}\n\nMIAUSI:\n{response}\n{'='*50}\n")
-                chat_display.see("end")
+                chat_display.see("end") # automatisch nach unten scrollen
                 chat_display.configure(state="disabled")
                 status.configure(text="✓ Nachricht gesendet", text_color="green")
             except Exception as ex:
                 error_msg = str(ex)
-                print(f"DEBUG - Chat Error: {error_msg}")  # Print to console for debugging
+                print(f"DEBUG - Chat Error: {error_msg}")  # Print in Terminal für debugging
                 status.configure(text=f"Fehler: {error_msg[:100]}", text_color="red")
-                # Show full error in chat for visibility
+
+                # Fehler auch im Chat anzeigen, damit der Nutzer es sieht
                 chat_display.configure(state="normal")
                 chat_display.insert("end", f"\n❌ FEHLER:\n{error_msg}\n{'='*50}\n")
                 chat_display.see("end")
                 chat_display.configure(state="disabled")
             finally:
+                # Eingabe in jedem Fall wieder freigeben
                 user_input.configure(state="normal")
                 send_btn.configure(state="normal")
-                dialog.after(2000, lambda: status.configure(text=""))
+                dialog.after(2000, lambda: status.configure(text="")) # Statusmeldung nach 2 Sekunden ausblenden
 
         send_btn = ctk.CTkButton(input_frame, text="Senden", command=send, height=40)
         send_btn.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
+    # detailansicht eines Eintrags
     def _open_detail(self, entry_id: int) -> None:
-        entry = get_entry_with_values(entry_id)
+        entry = get_entry_with_values(entry_id, self.current_user_id) # nur der eintrag dieses Users
         if not entry:
             return
 
+        # GUI Details
         dialog = ctk.CTkToplevel(self)
         dialog.title(f"Entry #{entry_id}")
         dialog.geometry("560x600")
@@ -257,35 +344,36 @@ class JournalApp(ctk.CTk):
         header.grid(row=0, column=0, padx=14, pady=14, sticky="ew")
         header.grid_columnconfigure(1, weight=1)
         
-        ctk.CTkLabel(header, text=f"Entry #{entry['id']}", font=ctk.CTkFont(size=18, weight="bold")).grid(row=0, column=1, sticky="w")
+        ctk.CTkLabel(header, text=f"Entry #{entry['id']}", font=ctk.CTkFont(size=18, weight="bold")).grid(row=0, column=1, sticky="w")  
 
         btns = ctk.CTkFrame(header, fg_color="transparent")
         btns.grid(row=0, column=2, sticky="e")
-        ctk.CTkButton(btns, text="Bearbeiten", command=lambda: self._open_edit(dialog, entry_id)).pack(side="left", padx=2)
-        ctk.CTkButton(btns, text="Löschen", fg_color="red", command=lambda: self._confirm_delete(dialog, entry_id)).pack(side="left", padx=2)
+        ctk.CTkButton(btns, text="Bearbeiten", fg_color="#0C6D31" ,width=32 ,command=lambda: self._open_edit(dialog, entry_id)).pack(side="left", padx=2) # eintrag bearbeiten
+        ctk.CTkButton(btns, text="Löschen", fg_color="red", command=lambda: self._confirm_delete(dialog, entry_id)).pack(side="left", padx=2) # eintrag löschen
 
-        # Info
+        # GUI Info
         info_frame = ctk.CTkFrame(dialog, fg_color="transparent")
         info_frame.grid(row=1, column=0, padx=14, pady=8, sticky="ew")
         info_frame.grid_columnconfigure(1, weight=1)
         
         ctk.CTkLabel(info_frame, text="Datum:", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, sticky="w")
-        ctk.CTkLabel(info_frame, text=entry['date']).grid(row=0, column=1, sticky="w", padx=(8, 0))
+        ctk.CTkLabel(info_frame, text=entry['date']).grid(row=0, column=1, sticky="w", padx=(8, 0)) # anzeige datum mit wert
         
         ctk.CTkLabel(info_frame, text="Von:", font=ctk.CTkFont(weight="bold")).grid(row=1, column=0, sticky="w", pady=(4, 0))
-        ctk.CTkLabel(info_frame, text=entry.get('created_by', '-')).grid(row=1, column=1, sticky="w", padx=(8, 0), pady=(4, 0))
-        
+        ctk.CTkLabel(info_frame, text=entry.get('created_by', '-')).grid(row=1, column=1, sticky="w", padx=(8, 0), pady=(4, 0)) # anzeige ersteller mit wert
+
         ctk.CTkLabel(info_frame, text="Notiz:", font=ctk.CTkFont(weight="bold")).grid(row=2, column=0, sticky="nw", pady=(4, 0))
-        ctk.CTkLabel(info_frame, text=entry.get('note', '-'), wraplength=350, justify="left").grid(row=2, column=1, sticky="w", padx=(8, 0), pady=(4, 0))
+        ctk.CTkLabel(info_frame, text=entry.get('note', '-'), wraplength=350, justify="left").grid(row=2, column=1, sticky="w", padx=(8, 0), pady=(4, 0)) # anzeige notiz mit wert
 
         # Metriken Header
-        ctk.CTkLabel(dialog, text="Metriken:", font=ctk.CTkFont(size=14, weight="bold")).grid(row=2, column=0, padx=14, pady=(12, 8), sticky="w")
+        ctk.CTkLabel(dialog, text="Metriken:", font=ctk.CTkFont(size=14, weight="bold")).grid(row=2, column=0, padx=14, pady=(12, 8), sticky="w") # anzeige header für metriken
 
-        # Metriken
+        # GUI Metriken
         values_frame = ctk.CTkScrollableFrame(dialog)
         values_frame.grid(row=3, column=0, padx=14, pady=8, sticky="nsew")
         values_frame.grid_columnconfigure(0, weight=1)
 
+        # auflistung metriken mit wert, oder Hinweis, dass keine Metriken erfasst wurden
         values = entry.get("values", [])
         if not values:
             ctk.CTkLabel(values_frame, text="Keine Metriken erfasst.").pack(anchor="w", padx=10, pady=10)
@@ -296,14 +384,15 @@ class JournalApp(ctk.CTk):
 
     # eintrag bearbeiten
     def _open_edit(self, parent: ctk.CTkToplevel, entry_id: int) -> None:
-        entry = get_entry_with_values(entry_id)
+        entry = get_entry_with_values(entry_id, self.current_user_id) # des angemeldeten Users
         if not entry:
             return
 
-        metrics = list_metrics()
-        values = {v["metric_id"]: str(v["value"]) for v in entry.get("values", [])}
-        vars = {}
+        metrics = list_metrics() # Liste metrics auf
+        values = {v["metric_id"]: str(v["value"]) for v in entry.get("values", [])} # dict für Metrik Key und Value
+        vars = {} 
 
+        # bearbeiten GUI
         dialog = ctk.CTkToplevel(parent)
         dialog.title(f"Entry #{entry_id} bearbeiten")
         dialog.geometry("520x700")
@@ -312,9 +401,10 @@ class JournalApp(ctk.CTk):
         dialog.grid_columnconfigure(0, weight=1)
         dialog.grid_rowconfigure(2, weight=1)
 
-        ctk.CTkLabel(dialog, text="Eintrag bearbeiten", font=ctk.CTkFont(size=18, weight="bold")).grid(row=0, column=0, padx=14, pady=14, sticky="w")
+        ctk.CTkLabel(dialog, text="Eintrag bearbeiten", font=ctk.CTkFont(size=18, weight="bold")).grid(row=0, column=0, padx=14, pady=14, sticky="w") # Button zum Bearbeiten eines Eintrags
 
-        # Felder
+        # einzelne Felder der Info mit Möglichkeit zur Bearbeitung, oder Anzeige, wenn nicht bearbeitbar
+        # labels können bearbeitet werden
         info = ctk.CTkFrame(dialog, fg_color="transparent")
         info.grid(row=1, column=0, padx=14, pady=8, sticky="ew")
         info.grid_columnconfigure(1, weight=1)
@@ -339,41 +429,43 @@ class JournalApp(ctk.CTk):
         # Metriken Header
         ctk.CTkLabel(dialog, text="Metriken:", font=ctk.CTkFont(size=14, weight="bold")).grid(row=2, column=0, padx=14, pady=(12, 8), sticky="w")
 
-        # Metriken
+        # Metriken Frame Scrollbar machen 
         values_frame = ctk.CTkScrollableFrame(dialog)
         values_frame.grid(row=3, column=0, padx=14, pady=8, sticky="nsew")
         values_frame.grid_columnconfigure(1, weight=1)
 
+        # Key wird angezeigt, Value kann bearbeitet werden
         for row, m in enumerate(metrics):
             ctk.CTkLabel(values_frame, text=m["key"]).grid(row=row, column=0, padx=10, pady=4, sticky="w")
-            default = values.get(m["id"], "-")
+            default = values.get(m["id"], "-") # wenn es für die Metrik bereits einen Wert gibt, diesen als default setzen, sonst "-"
             var = ctk.StringVar(value=default)
-            vars[m["id"]] = var
-            ctk.CTkOptionMenu(values_frame, variable=var, values=["-", "1", "2", "3", "4", "5"]).grid(row=row, column=1, padx=10, pady=4, sticky="e")
+            vars[m["id"]] = var # überarbeitete Metrik wird in id mit ihrem wert gespeichert
+            ctk.CTkOptionMenu(values_frame, variable=var, values=["-", "1", "2", "3", "4", "5"]).grid(row=row, column=1, padx=10, pady=4, sticky="e") # dropdwon auswahl 1-5
 
         # Speichern
         def save():
             try:
-                datetime.strptime(date_entry.get().strip(), "%Y-%m-%d")
+                datetime.strptime(date_entry.get().strip(), "%Y-%m-%d") # heutiger tag wird gehohlt
             except ValueError:
                 return
 
-            author_val = author.get().strip() or self.current_user
+            author_val = author.get().strip() or self.current_username # author ist created_by oder username
             note_val = note_box.get("1.0", "end").strip() or None
-            update_entry(entry_id, date=date_entry.get(), note=note_val, created_by=author_val)
+            update_entry(entry_id, date=date_entry.get(), note=note_val, created_by=author_val, user_id= self.current_user_id) # alle neuen werte werden gespeichert
 
             for mid, var in vars.items():
                 if var.get() == "-":
-                    delete_entry_value(entry_id, mid)
+                    delete_entry_value(entry_id, mid) # wenn eine Metrik den wert "-" hat, nicht speichern/Löschen
                 else:
-                    set_entry_value(entry_id, mid, int(var.get()))
+                    set_entry_value(entry_id, mid, int(var.get())) # neuen wert speichern
 
-            self._render_entries()
+            self._open_detail(entry_id) # zurück zum detail fenster dieses Eintrags
             dialog.destroy()
             parent.destroy()
 
-        ctk.CTkButton(dialog, text="Speichern", command=save, height=40).grid(row=4, column=0, padx=14, pady=14, sticky="ew")
+        ctk.CTkButton(dialog, text="Speichern", command=save, height=40).grid(row=4, column=0, padx=14, pady=14, sticky="ew") # Button zum speichern
 
+    # neuen Eintrag anlegen
     def _open_add_dialog(self) -> None:
         dialog = ctk.CTkToplevel(self)
         dialog.title("Neuen Entry anlegen")
@@ -386,13 +478,15 @@ class JournalApp(ctk.CTk):
 
         ctk.CTkLabel(dialog, text="Datum").grid(row=1, column=0, padx=14, sticky="w")
         date_e = ctk.CTkEntry(dialog)
-        date_e.insert(0, date.today().isoformat())
+        date_e.insert(0, date.today().isoformat()) # vorab eintrag des heutigen Datums
         date_e.grid(row=1, column=1, padx=14, sticky="ew")
 
+        # ersteller selbst vermerken
         ctk.CTkLabel(dialog, text="Erstellt von").grid(row=2, column=0, padx=14, sticky="w", pady=4)
         author_e = ctk.CTkEntry(dialog)
         author_e.grid(row=2, column=1, padx=14, sticky="ew", pady=4)
 
+        # notiz vermerken
         ctk.CTkLabel(dialog, text="Notiz").grid(row=3, column=0, padx=14, sticky="nw", pady=4)
         note_e = ctk.CTkTextbox(dialog, height=100)
         note_e.grid(row=3, column=1, padx=14, sticky="ew", pady=4)
@@ -401,24 +495,23 @@ class JournalApp(ctk.CTk):
         status.grid(row=4, column=0, columnspan=2, padx=14, sticky="w")
 
         def next_step():
-            date_text = date_e.get().strip()
+            date_text = date_e.get().strip() 
             try:
-                datetime.strptime(date_text, "%Y-%m-%d")
+                datetime.strptime(date_text, "%Y-%m-%d") 
             except ValueError:
                 status.configure(text="Ungültiges Datum!", text_color="red")
-                return
-            author_val = author_e.get().strip() or self.current_user
-            note_val = note_e.get("1.0", "end").strip() or None
+                return # prüfung des Datums
+            author_val = author_e.get().strip() or self.current_username # Prüfung des erstellers
+            note_val = note_e.get("1.0", "end").strip() or None # prüfung notiz
             dialog.destroy()
-            self._open_metrics_dialog(date_text, author_val, note_val)
+            self._open_metrics_dialog(date_text, author_val, note_val) # weiter zum Metriken-Dialog
 
         ctk.CTkButton(dialog, text="Weiter", command=next_step, height=40).grid(row=5, column=0, columnspan=2, padx=14, pady=10, sticky="ew")
 
     # metricen werte zuweisen
     def _open_metrics_dialog(self, date_text: str, author: str | None, note: str | None) -> None:
         metrics = list_metrics()
-        metric_values = {}
-
+        metric_values = {} # speichert die ausgewählten Werte je Metrik-ID
         dialog = ctk.CTkToplevel(self)
         dialog.title("Metriken und Werte")
         dialog.geometry("520x500")
@@ -435,7 +528,7 @@ class JournalApp(ctk.CTk):
 
         for row, m in enumerate(metrics):
             ctk.CTkLabel(values_frame, text=m["key"]).grid(row=row, column=0, padx=10, pady=4, sticky="w")
-            var = ctk.StringVar(value="-")
+            var = ctk.StringVar(value="-") # Standardwert "-" bedeutet: nicht erfasst
             metric_values[m["id"]] = var
             ctk.CTkOptionMenu(values_frame, variable=var, values=["-", "1", "2", "3", "4", "5"]).grid(row=row, column=1, padx=10, pady=4, sticky="e")
 
@@ -443,18 +536,19 @@ class JournalApp(ctk.CTk):
         status.grid(row=2, column=0, padx=14, pady=8, sticky="w")
 
         def save():
+            # nur Metriken speichern, die einen Wert haben (nicht "-")
             selected = [mid for mid, v in metric_values.items() if v.get() != "-"]
             if not selected:
                 status.configure(text="Mindestens eine Metrik erforderlich!", text_color="red")
                 return
 
-            eid = create_entry(date_text, note=note, created_by=author)
+            eid = create_entry(date_text, note=note, created_by=author, user_id=self.current_user_id)
             for mid in selected:
                 set_entry_value(eid, mid, int(metric_values[mid].get()))
 
-            self._render_entries()
+            self._render_entries() # Eintrags-Liste im Hauptfenster aktualisieren
             status.configure(text=f"Entry #{eid} gespeichert!", text_color="green")
-            dialog.after(500, dialog.destroy)
+            dialog.after(500, dialog.destroy) # Dialog nach kurzem Delay schließen
 
         ctk.CTkButton(dialog, text="Speichern", command=save, height=40).grid(row=3, column=0, padx=14, pady=10, sticky="ew")
 
@@ -471,14 +565,21 @@ class JournalApp(ctk.CTk):
         btns.pack(padx=14, pady=10, fill="x")
 
         def do_delete():
-            delete_entry(entry_id)
-            self._render_entries()
+            delete_entry(entry_id, self.current_user_id)
+            self._render_entries() # Liste nach dem Löschen aktualisieren
             confirm.destroy()
             parent.destroy()
 
         ctk.CTkButton(btns, text="Abbrechen", command=confirm.destroy).pack(side="left", expand=True, fill="x", padx=2)
         ctk.CTkButton(btns, text="Löschen", fg_color="red", command=do_delete).pack(side="left", expand=True, fill="x", padx=2)
 
+    def _logout(self) -> None:
+        self.current_user_id = None
+        self.current_username = None
+        save_config({"username": None})  
+        self.destroy() # aktuelles Fenster schließen
+        app = JournalApp() # neue Instanz starten → zeigt wieder den Login-Dialog
+        app.mainloop()
 
 # Entry Point der Anwendung mit User-Authentification
 if __name__ == "__main__":

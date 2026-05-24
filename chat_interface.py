@@ -20,7 +20,7 @@ except ImportError:
     print("Warnung: google-genai nicht verfügbar. Chat-Funktionen deaktiviert.")
     GENAI_AVAILABLE = False
     
-    # Dummy-Funktionen
+    # Dummy-Funktionen als Platzhalter, damit der Rest des Programms trotzdem läuft
     def therapy_cat_overview(*args, **kwargs):
         return "Entschuldigung, Miausi kann derzeit nicht sprechen (API nicht verfügbar). Bitte installiere: pip install google-genai"
     
@@ -33,10 +33,10 @@ except ImportError:
 
 class TherapyCatInterface:
     def __init__(self):
-        self.current_user = None
-        self.current_entry_id = None
-        self.metrics_list = list_metrics()
-        self.users = list_users()
+        self.current_user = None       # aktuell eingeloggter Benutzername
+        self.current_entry_id = None   # ID des aktuell ausgewählten Eintrags
+        self.metrics_list = list_metrics() # alle verfügbaren Metriken beim Start laden
+        self.users = list_users()          # alle bekannten Benutzer beim Start laden
 
     def clear_screen(self):
         """Bildschirm leeren (Windows & Unix)"""
@@ -52,6 +52,7 @@ class TherapyCatInterface:
         print("THERAPY CAT - Journal Assistant")
         print("=" * 70)
         
+        # wenn noch kein Benutzer existiert, direkt zur Registrierung springen
         if not self.users:
             print("\nKeine Benutzer gefunden. Bitte neuen Benutzer erstellen.\n")
             return self.create_new_user()
@@ -79,7 +80,7 @@ class TherapyCatInterface:
             else:
                 print("Ungültige Wahl!")
                 input("Weiter mit Enter...")
-                return self.select_or_create_user()
+                return self.select_or_create_user() # rekursiv neu anzeigen
         except ValueError:
             print("Ungültige Eingabe!")
             input("Weiter mit Enter...")
@@ -99,7 +100,7 @@ class TherapyCatInterface:
             return self.create_new_user()
         
         self.current_user = username
-        self.users.append(username)
+        self.users.append(username) # lokale Liste aktualisieren
         print(f"\nBenutzer '{username}' erstellt!")
         input("Weiter mit Enter...")
         return True
@@ -165,7 +166,7 @@ class TherapyCatInterface:
             if choice == 0:
                 return
             elif 1 <= choice <= len(entries):
-                self.current_entry_id = entries[choice - 1]['entry_id']
+                self.current_entry_id = entries[choice - 1]['entry_id'] # gewählten Eintrag merken
                 self.show_entry_detail()
             else:
                 print("Ungültige Wahl!")
@@ -184,6 +185,7 @@ class TherapyCatInterface:
             
             entry = get_entry_with_metrics(self.current_entry_id, created_by=self.current_user)
             
+            # Sicherheitsprüfung: Eintrag existiert und gehört dem aktuellen User
             if not entry:
                 print("\nEintrag nicht gefunden oder kein Zugriff!")
                 input("Weiter mit Enter...")
@@ -225,7 +227,7 @@ class TherapyCatInterface:
         
         entry_date = input(f"\nDatum (Standard: {date.today()}): ").strip()
         if not entry_date:
-            entry_date = str(date.today())
+            entry_date = str(date.today()) # heutiges Datum als Fallback
         
         note = input("Notiz (Optional): ").strip()
         
@@ -390,11 +392,11 @@ class TherapyCatInterface:
     def run(self):
         """Starten Sie das Interface"""
         while True:
-            # Benutzer auswählen
+            # Benutzer auswählen; bei Abbruch (False) Programm beenden
             if not self.select_or_create_user():
                 break
             
-            # Hauptmenü
+            # Hauptmenü anzeigen
             self.show_entries_menu()
 
 
@@ -460,9 +462,11 @@ def create_test_data():
         print(f"  - Entry 3 (heute): 5 Metriken")
         print(f"\nStarten Sie 'python chat_interface.py' um zu chatten!\n")
     except sqlite3.IntegrityError as e:
+        # tritt auf wenn Test-Daten bereits in der DB vorhanden sind
         print(f"Test-Daten existieren schon: {e}")
 
 
+# Einstiegspunkt: normaler Start oder Test-Daten-Modus per Kommandozeilenargument
 if __name__ == "__main__":
     import sys
     

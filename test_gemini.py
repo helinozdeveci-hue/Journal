@@ -1,18 +1,21 @@
-#AIzaSyAxsamRhFettu1g30KLBpncTXSc12npjIg
+from dotenv import load_dotenv
+import os
+
+load_dotenv() # Umgebungsvariablen aus der .env-Datei laden
+api_key = os.getenv("GEMINI_API_KEY") # API-Key aus den Umgebungsvariablen lesen
+
 from google import genai
 from google.genai import types
 from db import (
-    get_user_entries, get_entry_with_metrics, get_user_todays_metrics, 
-    get_user_metrics_raw_data, list_users, list_metrics
-)
-import json
+    list_entries, get_entry_with_values, get_todays_metrics, 
+    get_metrics_raw_data)
+
 from datetime import date
 
-# Config
-API_KEY = "AIzaSyAxsamRhFettu1g30KLBpncTXSc12npjIg"
+
 MODEL = "gemini-3.1-flash-lite-preview"  # Model Name
 
-# Instructions for the Therapy Cat - this will be the system prompt for all interactions
+# System-Prompt der Therapie-Katze: definiert Rolle, Tonalität und Verhalten für alle Anfragen
 THERAPY_CAT_SYSTEM_INSTRUCTION = """
 Du bist Miausi, eine liebevolle und einfühlsame Therapie-Katze mit tiefem Verständnis für menschliche Emotionen und Wohlbefinden.
 
@@ -61,13 +64,13 @@ Wenn schwere psychische Probleme erkannt werden (Depression > 4, Suizidgedanken 
 - Biete sofort Ressourcen an (Hotlines, Online-Therapie, etc.)
 """
 
-# initialize Gemini client
-client = genai.Client(api_key=API_KEY)
+# Gemini-Client mit dem geladenen API-Key initialisieren
+client = genai.Client(api_key=api_key)
 
-# 
+# alle Journaleinträge eines Nutzers als lesbaren Text aufbereiten
 def format_user_entries(created_by: str) -> str:
     
-    entries = get_user_entries(created_by)
+    entries = list_entries(created_by)
     
     entries_text = f"""
 === ALLE JOURNAL-EINTRÄGE FÜR {created_by.upper()} ===
@@ -101,7 +104,7 @@ def format_single_entry(entry_id: int, created_by: str) -> str | None:
     Returns:
         Formatierter String mit Entry-Details, oder None wenn nicht gefunden
     """
-    entry = get_entry_with_metrics(entry_id, created_by=created_by)
+    entry = get_entry_with_values(entry_id, created_by=created_by)
     
     if not entry:
         return None
@@ -134,7 +137,7 @@ def format_user_metrics_today(created_by: str) -> str:
     Returns:
         Formatierter String mit heutigen Metriken
     """
-    todays_metrics = get_user_todays_metrics(created_by)
+    todays_metrics = get_todays_metrics(created_by)
     
     metrics_text = f"""
 === {created_by.upper()} - METRIKEN HEUTE ({date.today()}) ===
@@ -160,7 +163,7 @@ def format_user_metrics_trend(created_by: str, days: int = 30) -> str:
     Returns:
         Formatierter String mit Metrik-Trends
     """
-    metrics_raw = get_user_metrics_raw_data(created_by, days=days)
+    metrics_raw = get_metrics_raw_data(created_by, days=days)
     
     trend_text = f"""
 === {created_by.upper()} - METRIK TRENDS (letzte {days} Tage) ===
@@ -213,10 +216,12 @@ def therapy_cat_overview(created_by: str) -> str:
     Returns:
         Antwort der Therapie-Katze als String
     """
+    # alle relevanten Kontextdaten für den Prompt zusammenstellen
     all_entries = format_user_entries(created_by)
     today_metrics = format_user_metrics_today(created_by)
     trends = format_user_metrics_trend(created_by, days=30)
     
+    # vollständigen Prompt aus System-Anweisung und Nutzerdaten zusammenbauen
     full_prompt = f"""{THERAPY_CAT_SYSTEM_INSTRUCTION}
 
 [USER-KONTEXT]
@@ -261,6 +266,7 @@ def therapy_cat_analyze_entry(entry_id: int, created_by: str, user_message: str 
     # SICHERHEIT: Prüfe ob dieser Entry vom User stammt
     entry_details = format_single_entry(entry_id, created_by)
     
+    # Zugriff verweigern wenn Eintrag nicht gefunden oder nicht dem User gehört
     if not entry_details:
         return f"Fehler: Entry #{entry_id} für Nutzer '{created_by}' nicht gefunden. Zugriff verweigert oder Entry existiert nicht."
     
@@ -336,53 +342,3 @@ Nachricht: {user_message}
         return response.text
     except Exception as e:
         raise Exception(f"Gemini API Error: {str(e)}")
-
-
-# ===== BEISPIEL NUTZUNG =====
-
-if __name__ == "__main__":
-    # Beispiel: Multi-User Support mit created_by
-    
-    print("=" * 70)
-    print("THERAPY CAT - Multi-User Journal Assistant")
-    print("=" * 70)
-    
-    # ===== EXAMPLE 1: Überblick über alle Einträge eines Users =====
-    user_name = "Alex"
-    print(f"\n[BEISPIEL 1] Überblick für User: {user_name}")
-    print("-" * 70)
-    # Entkommentiere um zu testen (braucht Daten in DB):
-    # response = therapy_cat_overview(created_by=user_name)
-    # print(f"Miausi:\n{response}\n")
-    print("(Test aktivieren wenn Testdaten in DB vorhanden sind)")
-    
-    # ===== EXAMPLE 2: Analyse eines einzelnen Entry =====
-    print(f"\n[BEISPIEL 2] Analyse eines spezifischen Entry")
-    print("-" * 70)
-    # Beispiel: Entry mit ID 1 für User "Alex"
-    # response = therapy_cat_analyze_entry(
-    #     entry_id=1,
-    #     created_by="Alex",
-    #     user_message="Wie habe ich mich damals gefühlt?"
-    # )
-    # print(f"Miausi:\n{response}\n")
-    print("(Test aktivieren: therapy_cat_analyze_entry(entry_id=1, created_by='Alex'))")
-    
-    # ===== EXAMPLE 3: Freier Chat mit der Katze =====
-    print(f"\n[BEISPIEL 3] Freier Chat mit der Katze")
-    print("-" * 70)
-    chat_message = "Ich fühle mich heute überfordert. Was kannst du mir vorschlagen?"
-    print(f"User ({user_name}): {chat_message}")
-    # response = therapy_cat_general_chat(
-    #     created_by=user_name,
-    #     user_message=chat_message
-    # )
-    # print(f"Miausi:\n{response}\n")
-    print("(Test aktivieren wenn Testdaten in DB vorhanden sind)")
-    
-    print("\n" + "=" * 70)
-    print("MULTI-USER SICHERHEIT:")
-    print("- Jede Funktion nutzt 'created_by' Parameter")
-    print("- Entries werden nur für den spezifizierten User geladen")
-    print("- Keine Vermischung zwischen verschiedenen Usern")
-    print("=" * 70)
