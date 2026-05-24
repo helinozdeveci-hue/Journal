@@ -20,6 +20,7 @@ class JournalApp(ctk.CTk):
         self.current_username = None        
         self._show_login_dialog()
         
+        # wenn der Login-Dialog geschlossen wurde ohne Einloggen, Fenster schließen
         if not self.current_user_id:
             self.destroy() # User hat Login abgebrochen
             return 
@@ -44,7 +45,7 @@ class JournalApp(ctk.CTk):
         login_window.title("Willkommen!")
         login_window.geometry("400x320")
         login_window.resizable(False, False)
-        login_window.grab_set()
+        login_window.grab_set() # blockiert Interaktion mit dem Hauptfenster solange der Dialog offen ist
         login_window.focus()
 
         ctk.CTkLabel(
@@ -56,7 +57,7 @@ class JournalApp(ctk.CTk):
         saved_username = get_saved_username() # zuletzt verwendeten Benutzernamen laden, wenn vorhanden
         username_entry = ctk.CTkEntry(login_window, placeholder_text="Username") # platzhalter
         if saved_username:
-            username_entry.insert(0, saved_username)
+            username_entry.insert(0, saved_username) # gespeicherten Namen direkt eintragen
         username_entry.pack(padx=20, pady=10, fill="x")
         pin_entry = ctk.CTkEntry(login_window, placeholder_text="PIN (4-stellig)", show="*") # platzhalter
         pin_entry.pack(padx=20, pady=10, fill="x") 
@@ -78,7 +79,7 @@ class JournalApp(ctk.CTk):
             if user_id:
                 self.current_user_id = user_id
                 self.current_username = username
-                save_username(username)
+                save_username(username) # username für nächsten Start speichern
                 print_config_info()
                 login_window.destroy()
             else:
@@ -98,6 +99,7 @@ class JournalApp(ctk.CTk):
         
         # Warte auf Bestätigung
         self.wait_window(login_window)
+
     # Registrierungsdialog für neue Benutzer
     def _show_register_dialog(self) -> None:
         reg_window = ctk.CTkToplevel(self)
@@ -138,6 +140,7 @@ class JournalApp(ctk.CTk):
                 return
             success = register_new_user(username, pin) # success bekommt Registrier Daten zurück
             if success:
+                # nach erfolgreicher Registrierung direkt einloggen
                 user_id = login_user(username, pin)
                 self.current_user_id = user_id
                 self.current_username = username
@@ -154,6 +157,7 @@ class JournalApp(ctk.CTk):
 
     # Desktop App wird hier aufgebaut, nachdem der Benutzer eingeloggt ist
     def _build_ui(self) -> None:
+        # Spalte 0 dehnt sich mit dem Fenster, Zeile 1 nimmt den restlichen Platz ein
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
@@ -171,7 +175,7 @@ class JournalApp(ctk.CTk):
         self.user_btn.pack(side="left", padx=4) # anzeige Username mit Möglichkeit zur Änderung
         ctk.CTkButton(btn_frame, text="🐱 KI Katze", width=120, fg_color="#0C6D31",
                       command=self._open_cat_chat).pack(side="left", padx=4) # Miausi, die Therapie-Katze, öffnet einen Chat Dialog
-        ctk.CTkButton(btn_frame, text="+ Eintrag", command=self._open_add_dialog).pack(side="left", padx=4) # Button zum Anlegen eines neuen Eintrags
+        ctk.CTkButton(btn_frame, text="+ Eintrag", fg_color="#0C6D31",command=self._open_add_dialog).pack(side="left", padx=4) # Button zum Anlegen eines neuen Eintrags
         ctk.CTkButton(btn_frame, text="🔄 Logout", fg_color="#0C6D31", command=self._logout).pack(side="left", padx=4) #  Button zum Logout
 
         # Entry Liste Design
@@ -180,6 +184,7 @@ class JournalApp(ctk.CTk):
         table_frame.grid_rowconfigure(0, weight=1)
         table_frame.grid_columnconfigure(0, weight=1)
 
+        # scrollbarer Bereich für alle Einträge
         self.entries_frame = ctk.CTkScrollableFrame(table_frame)
         self.entries_frame.grid(row=0, column=0, padx=12, pady=12, sticky="nsew")
         self.entries_frame.grid_columnconfigure(0,weight=1)
@@ -187,6 +192,7 @@ class JournalApp(ctk.CTk):
 
     # anzeige der Einträge
     def _render_entries(self) -> None:
+        # zuerst alle alten Widgets löschen, bevor neu gerendert wird
         for w in self.entries_frame.winfo_children():
             w.destroy()
         if not self.current_user_id:
@@ -198,7 +204,7 @@ class JournalApp(ctk.CTk):
 
             # auflistung der Einträge mit Datum, Notiz und Ersteller
         for idx, e in enumerate(entries):
-            note = (e.get("note") or "").replace("\n", " ")[:50]
+            note = (e.get("note") or "").replace("\n", " ")[:50] # Zeilenumbrüche entfernen und auf 50 Zeichen kürzen
             author = e.get("created_by") or "-"
             row = ctk.CTkFrame(self.entries_frame, fg_color="transparent")
             row.grid(row=idx, column=0, padx=8, pady=6, sticky="ew")
@@ -207,7 +213,7 @@ class JournalApp(ctk.CTk):
             card = ctk.CTkFrame(row, height=100)
             card.grid(row=0, column=0, sticky="ew")
             card.grid_columnconfigure(0, weight=1)
-            card.grid_propagate(False)
+            card.grid_propagate(False) # Karte behält feste Höhe, unabhängig vom Inhalt
 
             info = f"#{e['id']} | {e['date']} | {author}"
             ctk.CTkLabel(card, text=info, font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, padx=12, pady=(10, 4), sticky="w")
@@ -216,7 +222,7 @@ class JournalApp(ctk.CTk):
 
             btns = ctk.CTkFrame(card, fg_color="transparent")
             btns.grid(row=0, column=1, rowspan=2, padx=12, sticky="e")
-            ctk.CTkButton(btns, text="✏️", width=32,
+            ctk.CTkButton(btns, text="✏️",fg_color="#0C6D31" ,width=32,
                          command=lambda eid=e['id']: self._open_detail(eid)).pack(side="left", padx=2) # button zum öffnen der Detailansicht eines Eintrags
 
     # Benutzername-Änder Dialog
@@ -241,8 +247,8 @@ class JournalApp(ctk.CTk):
                 success = update_username(self.current_user_id, new_username)
                 if success:
                     self.current_username = new_username
-                    save_username(new_username)
-                    self.user_btn.configure(text=f"👤 {new_username}")
+                    save_username(new_username) # neuen Namen in Konfigurationsdatei speichern
+                    self.user_btn.configure(text=f"👤 {new_username}") # Header-Button aktualisieren
                     dialog.destroy()
                     self._render_entries()
                     
@@ -267,7 +273,7 @@ class JournalApp(ctk.CTk):
                     font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, padx=14, pady=14)
 
         # aussehen chat mit eingabefeld
-        chat_display = ctk.CTkTextbox(dialog, state="disabled")
+        chat_display = ctk.CTkTextbox(dialog, state="disabled") # schreibgeschützt, nur Anzeige
         chat_display.grid(row=1, column=0, padx=14, sticky="nsew")
 
         input_frame = ctk.CTkFrame(dialog)
@@ -285,6 +291,7 @@ class JournalApp(ctk.CTk):
             msg = user_input.get("1.0", "end").strip()
             if not msg:
                 return
+            # Eingabe sperren während auf Antwort gewartet wird
             user_input.configure(state="disabled")
             send_btn.configure(state="disabled")
             status.configure(text="Miausi überlegt...", text_color="gray")
@@ -295,7 +302,7 @@ class JournalApp(ctk.CTk):
                 response = therapy_cat_general_chat(created_by=self.current_username, user_message=msg)
                 chat_display.configure(state="normal")
                 chat_display.insert("end", f"\nDU:\n{msg}\n\nMIAUSI:\n{response}\n{'='*50}\n")
-                chat_display.see("end")
+                chat_display.see("end") # automatisch nach unten scrollen
                 chat_display.configure(state="disabled")
                 status.configure(text="✓ Nachricht gesendet", text_color="green")
             except Exception as ex:
@@ -309,9 +316,10 @@ class JournalApp(ctk.CTk):
                 chat_display.see("end")
                 chat_display.configure(state="disabled")
             finally:
+                # Eingabe in jedem Fall wieder freigeben
                 user_input.configure(state="normal")
                 send_btn.configure(state="normal")
-                dialog.after(2000, lambda: status.configure(text=""))
+                dialog.after(2000, lambda: status.configure(text="")) # Statusmeldung nach 2 Sekunden ausblenden
 
         send_btn = ctk.CTkButton(input_frame, text="Senden", command=send, height=40)
         send_btn.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
@@ -340,7 +348,7 @@ class JournalApp(ctk.CTk):
 
         btns = ctk.CTkFrame(header, fg_color="transparent")
         btns.grid(row=0, column=2, sticky="e")
-        ctk.CTkButton(btns, text="Bearbeiten", command=lambda: self._open_edit(dialog, entry_id)).pack(side="left", padx=2) # eintrag bearbeiten
+        ctk.CTkButton(btns, text="Bearbeiten", fg_color="#0C6D31" ,width=32 ,command=lambda: self._open_edit(dialog, entry_id)).pack(side="left", padx=2) # eintrag bearbeiten
         ctk.CTkButton(btns, text="Löschen", fg_color="red", command=lambda: self._confirm_delete(dialog, entry_id)).pack(side="left", padx=2) # eintrag löschen
 
         # GUI Info
@@ -496,14 +504,14 @@ class JournalApp(ctk.CTk):
             author_val = author_e.get().strip() or self.current_username # Prüfung des erstellers
             note_val = note_e.get("1.0", "end").strip() or None # prüfung notiz
             dialog.destroy()
-            self._open_metrics_dialog(date_text, author_val, note_val)
+            self._open_metrics_dialog(date_text, author_val, note_val) # weiter zum Metriken-Dialog
 
         ctk.CTkButton(dialog, text="Weiter", command=next_step, height=40).grid(row=5, column=0, columnspan=2, padx=14, pady=10, sticky="ew")
 
     # metricen werte zuweisen
     def _open_metrics_dialog(self, date_text: str, author: str | None, note: str | None) -> None:
         metrics = list_metrics()
-        metric_values = {}
+        metric_values = {} # speichert die ausgewählten Werte je Metrik-ID
         dialog = ctk.CTkToplevel(self)
         dialog.title("Metriken und Werte")
         dialog.geometry("520x500")
@@ -520,7 +528,7 @@ class JournalApp(ctk.CTk):
 
         for row, m in enumerate(metrics):
             ctk.CTkLabel(values_frame, text=m["key"]).grid(row=row, column=0, padx=10, pady=4, sticky="w")
-            var = ctk.StringVar(value="-")
+            var = ctk.StringVar(value="-") # Standardwert "-" bedeutet: nicht erfasst
             metric_values[m["id"]] = var
             ctk.CTkOptionMenu(values_frame, variable=var, values=["-", "1", "2", "3", "4", "5"]).grid(row=row, column=1, padx=10, pady=4, sticky="e")
 
@@ -528,6 +536,7 @@ class JournalApp(ctk.CTk):
         status.grid(row=2, column=0, padx=14, pady=8, sticky="w")
 
         def save():
+            # nur Metriken speichern, die einen Wert haben (nicht "-")
             selected = [mid for mid, v in metric_values.items() if v.get() != "-"]
             if not selected:
                 status.configure(text="Mindestens eine Metrik erforderlich!", text_color="red")
@@ -537,9 +546,9 @@ class JournalApp(ctk.CTk):
             for mid in selected:
                 set_entry_value(eid, mid, int(metric_values[mid].get()))
 
-            self._render_entries()
+            self._render_entries() # Eintrags-Liste im Hauptfenster aktualisieren
             status.configure(text=f"Entry #{eid} gespeichert!", text_color="green")
-            dialog.after(500, dialog.destroy)
+            dialog.after(500, dialog.destroy) # Dialog nach kurzem Delay schließen
 
         ctk.CTkButton(dialog, text="Speichern", command=save, height=40).grid(row=3, column=0, padx=14, pady=10, sticky="ew")
 
@@ -557,7 +566,7 @@ class JournalApp(ctk.CTk):
 
         def do_delete():
             delete_entry(entry_id, self.current_user_id)
-            self._render_entries()
+            self._render_entries() # Liste nach dem Löschen aktualisieren
             confirm.destroy()
             parent.destroy()
 
@@ -568,8 +577,8 @@ class JournalApp(ctk.CTk):
         self.current_user_id = None
         self.current_username = None
         save_config({"username": None})  
-        self.destroy()
-        app = JournalApp()
+        self.destroy() # aktuelles Fenster schließen
+        app = JournalApp() # neue Instanz starten → zeigt wieder den Login-Dialog
         app.mainloop()
 
 # Entry Point der Anwendung mit User-Authentification

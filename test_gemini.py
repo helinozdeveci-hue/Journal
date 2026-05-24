@@ -1,8 +1,8 @@
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
-api_key = os.getenv("GEMINI_API_KEY")
+load_dotenv() # Umgebungsvariablen aus der .env-Datei laden
+api_key = os.getenv("GEMINI_API_KEY") # API-Key aus den Umgebungsvariablen lesen
 
 from google import genai
 from google.genai import types
@@ -15,7 +15,7 @@ from datetime import date
 
 MODEL = "gemini-3.1-flash-lite-preview"  # Model Name
 
-# Instructions for the Therapy Cat - this will be the system prompt for all interactions
+# System-Prompt der Therapie-Katze: definiert Rolle, Tonalität und Verhalten für alle Anfragen
 THERAPY_CAT_SYSTEM_INSTRUCTION = """
 Du bist Miausi, eine liebevolle und einfühlsame Therapie-Katze mit tiefem Verständnis für menschliche Emotionen und Wohlbefinden.
 
@@ -64,10 +64,10 @@ Wenn schwere psychische Probleme erkannt werden (Depression > 4, Suizidgedanken 
 - Biete sofort Ressourcen an (Hotlines, Online-Therapie, etc.)
 """
 
-# initialize Gemini client
+# Gemini-Client mit dem geladenen API-Key initialisieren
 client = genai.Client(api_key=api_key)
 
-# 
+# alle Journaleinträge eines Nutzers als lesbaren Text aufbereiten
 def format_user_entries(created_by: str) -> str:
     
     entries = list_entries(created_by)
@@ -216,10 +216,12 @@ def therapy_cat_overview(created_by: str) -> str:
     Returns:
         Antwort der Therapie-Katze als String
     """
+    # alle relevanten Kontextdaten für den Prompt zusammenstellen
     all_entries = format_user_entries(created_by)
     today_metrics = format_user_metrics_today(created_by)
     trends = format_user_metrics_trend(created_by, days=30)
     
+    # vollständigen Prompt aus System-Anweisung und Nutzerdaten zusammenbauen
     full_prompt = f"""{THERAPY_CAT_SYSTEM_INSTRUCTION}
 
 [USER-KONTEXT]
@@ -264,6 +266,7 @@ def therapy_cat_analyze_entry(entry_id: int, created_by: str, user_message: str 
     # SICHERHEIT: Prüfe ob dieser Entry vom User stammt
     entry_details = format_single_entry(entry_id, created_by)
     
+    # Zugriff verweigern wenn Eintrag nicht gefunden oder nicht dem User gehört
     if not entry_details:
         return f"Fehler: Entry #{entry_id} für Nutzer '{created_by}' nicht gefunden. Zugriff verweigert oder Entry existiert nicht."
     
@@ -339,4 +342,3 @@ Nachricht: {user_message}
         return response.text
     except Exception as e:
         raise Exception(f"Gemini API Error: {str(e)}")
-
