@@ -3,10 +3,7 @@ Interaktives CLI-Interface für die Therapy Cat
 Hier können Sie mit der KI interagieren und Ihre Einträge verwalten.
 """
 
-from db import (
-    create_entry, add_entry_value, get_user_entries, get_entry_with_metrics,
-    get_user_todays_metrics, list_users, list_metrics, create_metric
-)
+from db import (create_entry, add_entry_value, list_metrics, list_created_by, list_entries, get_entry_with_values)
 from datetime import date
 import sqlite3
 
@@ -36,7 +33,7 @@ class TherapyCatInterface:
         self.current_user = None       # aktuell eingeloggter Benutzername
         self.current_entry_id = None   # ID des aktuell ausgewählten Eintrags
         self.metrics_list = list_metrics() # alle verfügbaren Metriken beim Start laden
-        self.users = list_users()          # alle bekannten Benutzer beim Start laden
+        self.users = list_created_by(self.current_user)          # alle bekannten Benutzer beim Start laden
 
     def clear_screen(self):
         """Bildschirm leeren (Windows & Unix)"""
@@ -115,7 +112,7 @@ class TherapyCatInterface:
             print(f"EINTRÄGE - Benutzer: {self.current_user}")
             print("=" * 70)
             
-            entries = get_user_entries(self.current_user)
+            entries = list_entries(self.current_user)
             
             if not entries:
                 print("\nKeine Einträge gefunden.\n")
@@ -183,7 +180,7 @@ class TherapyCatInterface:
             print(f"EINTRAG DETAIL - ID: {self.current_entry_id}")
             print("=" * 70)
             
-            entry = get_entry_with_metrics(self.current_entry_id, created_by=self.current_user)
+            entry = get_entry_with_values(self.current_entry_id, created_by=self.current_user)
             
             # Sicherheitsprüfung: Eintrag existiert und gehört dem aktuellen User
             if not entry:

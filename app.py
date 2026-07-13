@@ -1,13 +1,19 @@
 from datetime import date, datetime # damit das Datum gespeichert werden kann
 import customtkinter as ctk # für die GUI
 
+# hinweis import key für freunde
+from user_key_config import load_key, save_key
+from key_popup import key_popup
+
+
 # selbst erstellte Methoden importieren
 from db import (
     create_entry, delete_entry, delete_entry_value, get_entry_with_values,
     init_db, list_entries, list_metrics, set_entry_value, update_entry,update_username
     )
 from user_config import print_config_info, login_user, register_new_user, get_saved_username, save_config, save_username
-from test_gemini import therapy_cat_general_chat
+from test_gemini import initialise_client, therapy_cat_general_chat, get_client, validate_key
+import tkinter.messagebox as messagebox
 
 # Hauptklasse der Anwendung, erbt von ctk.CTk für die GUI
 class JournalApp(ctk.CTk): 
@@ -259,8 +265,21 @@ class JournalApp(ctk.CTk):
         username_entry.focus()
         username_entry.bind("<Return>", lambda e: change_username())
 
-    # Therapie-Katzen Chat öffnen
     def _open_cat_chat(self) -> None:
+        def start_chat(key):
+            initialise_client(key)
+            self._show_cat_chat_dialog()
+
+        key = load_key()
+        if key:
+            initialise_client(key)
+            # Hinweis: validate_key() macht einen zusätzlichen API-Call.
+            # Um Tokenverbrauch zu minimieren, öffnen wir den Chat direkt.
+            self._show_cat_chat_dialog()
+        else:
+            key_popup(callback=start_chat)
+
+    def _show_cat_chat_dialog(self) -> None:
         dialog = ctk.CTkToplevel(self)
         dialog.title("Chat mit Miausi 🐱")
         dialog.geometry("600x500")

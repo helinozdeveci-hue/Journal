@@ -2,7 +2,10 @@ import sqlite3
 from pathlib import Path
 from datetime import date, datetime, timedelta
 
-db_path = Path("journal.db") # Pfad zur SQLite-Datenbankdatei
+from user_key_config import get_app_dir
+
+# Use a per-user database in the AppData folder so each friend keeps their own history.
+db_path = Path(get_app_dir()) / "journal.db"
 
 # Datenbankverbindung herstellen und konfigurieren
 def get_connection() -> sqlite3.Connection:
