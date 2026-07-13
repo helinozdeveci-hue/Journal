@@ -11,7 +11,7 @@ def key_popup(callback):
         return
     fenster = tk.Toplevel()
     fenster.title("API Key erforderlich")
-    fenster.geometry("420x250")
+    fenster.geometry("420x430")
     fenster.resizable(False, False)
 
     tk.Label(fenster, text="Google API Key erforderlich", font=("Arial", 13, "bold")).pack(pady=(20, 5))
@@ -37,9 +37,8 @@ def key_popup(callback):
     def save_key_and_start():
         key = eingabe.get().strip()
         if not key:
-            messagebox.showwarning("Kein API-Key eingegeben! Bittööö eingeben :)")
+            messagebox.showwarning("Fehlt", "Kein API-Key eingegeben! Bitte eingeben :)")
             return
         save_key(key)
         fenster.destroy()
         callback(key)
-    tk.Button(fenster, text="Bestätigen", command=save_key_and_start).pack(pady=10)

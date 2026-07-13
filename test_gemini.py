@@ -3,6 +3,8 @@ from google import genai
 from google.genai import types
 from datetime import date
 from typing import Optional
+import time
+
 
 # dotenv und os.getenv KOMPLETT RAUS - das macht jetzt user_key_config
 
@@ -16,12 +18,11 @@ def initialise_client(key):
 def get_client():
     return _client
 
-MODEL = "gemini-1.5-flash"  # robustes, weit verbreitetes Modell
-# Disable automatic fallbacks to avoid multiple requests that consume quota
-MODEL_FALLBACKS = ()
+MODEL = "gemini-3.5-flash"
+MODEL_FALLBACKS = ("gemini-3-flash-preview", "gemini-flash-latest")
 
 # Very small token budget to keep costs low and avoid unnecessary usage.
-MAX_OUTPUT_TOKENS = 24
+MAX_OUTPUT_TOKENS = 150
 MAX_PROMPT_CHARS = 220
 
 # System-Prompt der Therapie-Katze: OPTIMIERT für minimale Token-Nutzung
@@ -62,39 +63,45 @@ def _classify_gemini_error(error: Exception) -> str:
 
     return f"Gemini API Fehler: {error_text}"
 
-
 def _generate_with_fallbacks(full_prompt: str):
     client = _require_client()
     last_error: Optional[Exception] = None
 
     for model_name in (MODEL, *MODEL_FALLBACKS):
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=[
-                    types.Content(
-                        role="user",
-                        parts=[types.Part.from_text(text=full_prompt)],
-                    )
-                ],
-                config={"max_output_tokens": MAX_OUTPUT_TOKENS},
-            )
-            text = getattr(response, "text", None)
-            if isinstance(text, str) and text.strip():
-                return text.strip()
-            return str(response)
-        except Exception as exc:
-            last_error = exc
-            lower = str(exc).lower()
-            if any(token in lower for token in ["404", "not found", "model"]):
-                continue
-            raise RuntimeError(_classify_gemini_error(exc)) from exc
+        for attempt in range(2):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[
+                        types.Content(
+                            role="user",
+                            parts=[types.Part.from_text(text=full_prompt)],
+                        )
+                    ],
+                    config=types.GenerateContentConfig(
+                        max_output_tokens=MAX_OUTPUT_TOKENS,
+                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                    ),
+                )
+                text = getattr(response, "text", None)
+                if isinstance(text, str) and text.strip():
+                    return text.strip()
+                return str(response)
+            except Exception as exc:
+                last_error = exc
+                print(f"[DEBUG] Rohfehler von Gemini ({model_name}): {exc}")
+                lower = str(exc).lower()
+                if "503" in lower and attempt == 0:
+                    time.sleep(2)
+                    continue
+                if any(token in lower for token in ["404", "not found", "model"]):
+                    break
+                raise RuntimeError(_classify_gemini_error(exc)) from exc
 
     if last_error is not None:
         raise RuntimeError(_classify_gemini_error(last_error)) from last_error
 
     raise RuntimeError("Gemini-Anfrage fehlgeschlagen ohne detaillierte Fehlermeldung.")
-
 
 def validate_key(max_output_tokens: int = 8) -> bool:
     """

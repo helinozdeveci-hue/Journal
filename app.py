@@ -1,5 +1,6 @@
 from datetime import date, datetime # damit das Datum gespeichert werden kann
 import customtkinter as ctk # für die GUI
+from seed_metrics import seed_metrics
 
 # hinweis import key für freunde
 from user_key_config import load_key, save_key
@@ -20,6 +21,7 @@ class JournalApp(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
         init_db()
+        seed_metrics()
         
         # werte haben keinen wert, damit sie nach dem Login gesetzt werden können
         self.current_user_id = None

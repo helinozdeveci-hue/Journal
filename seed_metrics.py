@@ -1,7 +1,5 @@
 import sqlite3
-from db import init_db, create_metric
-
-init_db()
+from db import create_metric
 
 metrics = [
     "stomach ache",
@@ -25,8 +23,10 @@ metrics = [
     "focus problems",
     "forgetfulness"
 ]
-for m in metrics:
-    try:
-        create_metric(m)
-    except sqlite3.IntegrityError:
-        pass
+
+def seed_metrics():
+    for m in metrics:
+        try:
+            create_metric(m)
+        except sqlite3.IntegrityError:
+            pass
