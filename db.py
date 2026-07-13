@@ -1,37 +1,41 @@
 import sqlite3
 from pathlib import Path
+from datetime import date, datetime, timedelta
 
-db_path = Path("journal.db")
+from user_key_config import get_app_dir
 
+# Use a per-user database in the AppData folder so each friend keeps their own history.
+db_path = Path(get_app_dir()) / "journal.db"
+
+# Datenbankverbindung herstellen und konfigurieren
 def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
-    # Enable dict-like access to rows
-    conn.row_factory = sqlite3.Row 
-    # Enable foreign key support
-    conn.execute('PRAGMA foreign_keys = ON') 
+    conn.row_factory = sqlite3.Row # Zeilen als dict-ähnliche Objekte zurückgeben (Zugriff per Spaltenname)
+    conn.execute('PRAGMA foreign_keys = ON') # Fremdschlüssel-Constraints aktivieren (standardmäßig in SQLite aus)
     return conn
 
+# Datenbank initialisieren: Tabellen anlegen, falls sie noch nicht existieren
 def init_db():
-    # as long as the database file doesn't exist, it will be created when we connect to it. If it already exists, it will be opened.
-    # connection to the database as conn
     with get_connection() as conn: 
-        # The entries table has the following columns: id (primary key), date (text, not null), note (text), created_by (text)
+        # Tabelle für Journaleinträge
         conn.execute("""
             CREATE TABLE IF NOT EXISTS entries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date TEXT NOT NULL,
                 note TEXT,
-                created_by TEXT
+                user_id INTEGER,
+                created_by TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(id)
             );
         """)
-        
+        # Tabelle für Metrik-Definitionen (z.B. "Stimmung", "Schlaf")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS metrics (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 key TEXT NOT NULL UNIQUE
             );
         """)
-
+        # Tabelle für die konkreten Metrik-Werte pro Eintrag (1–5)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS entry_values (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,28 +44,36 @@ def init_db():
                 value INTEGER NOT NULL,
                 FOREIGN KEY (entry_id) REFERENCES entries (id) ON DELETE CASCADE,
                 FOREIGN KEY (metric_id) REFERENCES metrics (id) ON DELETE CASCADE,
-                UNIQUE (entry_id, metric_id),
-                CHECK (value BETWEEN 1 AND 5)
+                UNIQUE (entry_id, metric_id), -- pro Eintrag nur ein Wert je Metrik
+                CHECK (value BETWEEN 1 AND 5) -- Wert muss zwischen 1 und 5 liegen
             );
         """)
-        # commit the changes to the database
+        # Tabelle für Benutzer mit PIN-Absicherung
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                pin INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CHECK (pin BETWEEN 1000 AND 9999) -- PIN muss 4-stellig sein
+            );
+        """)
         conn.commit()
 
-# entry has date, note, created_by 
-def create_entry(date: str, note: str | None = None, created_by: str | None = None):
+
+# neuen Journaleintrag anlegen und die vergebene ID zurückgeben
+def create_entry(date: str, note: str | None = None, created_by: str | None = None, user_id: int | None = None) -> int:
     with get_connection() as conn:
-        # ? are placeholders for date, note, created_by 
         cursor = conn.execute("""
-        INSERT INTO entries (date, note, created_by) 
-        VALUES (?, ?, ?) 
-        """, (date, note, created_by))
+        INSERT INTO entries(date, note, created_by, user_id) 
+        VALUES (?, ?, ?, ?)  
+        """, (date, note, created_by, user_id,))
         conn.commit()
-        # lastrowid gives unique auto-incrementing id's
-        entry_id = cursor.lastrowid 
+        entry_id = cursor.lastrowid # ID des gerade eingefügten Datensatzes
         return entry_id
             
-# new created metric (e.g. "sadness") is added to the metrics table             
-def create_metric(key: str) -> int:
+# neue Metrik anlegen (z.B. "Stimmung") und ihre ID zurückgeben
+def create_metric(key: str):
     with get_connection() as conn:
         cursor = conn.execute("""
         INSERT INTO metrics (key) 
@@ -71,154 +83,134 @@ def create_metric(key: str) -> int:
         metric_id = cursor.lastrowid
         return metric_id
         
+# alle Metriken als Liste von Dicts zurückgeben
 def list_metrics():
     with get_connection() as conn:
         cursor = conn.execute("SELECT id, key FROM metrics")
         return [dict(row) for row in cursor.fetchall()]
     
+# Metrik anhand ihrer ID löschen, gibt True zurück wenn erfolgreich
 def delete_metric(metric_id: int):
     with get_connection() as conn:
         cursor = conn.execute("DELETE FROM metrics WHERE id = ?", (metric_id,))
         conn.commit()
         return cursor.rowcount > 0 
     
-# value (1-5) can be added to an entry for a specific metric (e.g. "sadness" = 3)
-def add_entry_value(entry_id: int, metric_id: int, value: int)-> int:
+# Metrik-Wert zu einem Eintrag hinzufügen
+def add_entry_value(entry_id: int, metric_id: int, value: int) -> int:
     with get_connection() as conn:
         cursor = conn.execute("""
         INSERT INTO entry_values (entry_id, metric_id, value)
-        VALUES (?, ?, ?)""", (entry_id, metric_id, value))
+        VALUES (?, ?, ?)                    
+        """, (entry_id, metric_id, value,))
         conn.commit()
         value_id = cursor.lastrowid
         return value_id
 
-def list_entries(limit: int | None = None):
-    sql = "SELECT id, date, note, created_by FROM entries ORDER BY date DESC"
-    params = ()
+# alle Einträge eines Nutzers abrufen, neueste zuerst
+def list_entries(user_id: int, limit: int | None = None):
+    sql = "SELECT * FROM entries WHERE user_id = ? ORDER BY date DESC"
+    params = [user_id]
     with get_connection() as conn:
         if limit is not None:
             sql += " LIMIT ?"
-            params = (limit,)
+            params.append(limit)
         cursor = conn.execute(sql, params)
         return [dict(row) for row in cursor.fetchall()]
     
-def list_entry_values(entry_id: int) -> dict | None:
-    with get_connection() as conn:
-        cursor = conn.execute("SELECT * FROM entries WHERE id = ?", (entry_id,))
-        entry_row = cursor.fetchone()
-        if entry_row is None:
-            return None
-        
-        cursor = conn.execute("""
-        SELECT 
-            ev.id as entry_value_id,
-            m.id as metric_id,
-            m.key as metric_key,
-            ev.value as metric_value
-        FROM entry_values ev
-        JOIN metrics m ON m.id = ev.metric_id
-        WHERE ev.entry_id = ?
-        """, (entry_id,))
-        value_rows = [dict(row) for row in cursor.fetchall()]
-        entry = dict(entry_row)
-        entry['values'] = value_rows
-        return entry
     
-def update_entry(entry_id: int, date: str, note: str | None = None, created_by: str | None = None) -> bool:
+# bestehenden Eintrag aktualisieren; nur Felder mit Wert werden überschrieben
+def update_entry(entry_id: int, date: str, note: str | None = None, created_by: str | None = None, user_id: int | None = None) -> bool:
     all_updates = {"date": date, "note": note, "created_by": created_by}
-    updates = {field: value for field, value in all_updates.items() if value is not None}
+    updates = {field: value for field, value in all_updates.items() if value is not None} # None-Felder ausschließen
     if not updates:
         return False
     
     with get_connection() as conn:
-        field_str = ", ".join(f"{field} = ?" for field in updates)
+        field_str = ", ".join(f"{field} = ?" for field in updates) # dynamisch SQL-SET-Klausel aufbauen
         cursor = conn.execute(f"""
         UPDATE entries 
         SET {field_str}
-        WHERE id = ?
-        """, (*updates.values(), entry_id))
+        WHERE id = ? AND user_id = ?
+        """, (*updates.values(), entry_id, user_id,))
         conn.commit()
-        return cursor.rowcount > 0 
+        return cursor.rowcount > 0
+
     
-def set_entry_value(entry_id: int, metric_id: int, value: int) -> int:
+# Metrik-Wert setzen oder bei Konflikt (gleiche entry_id + metric_id) überschreiben
+def set_entry_value(entry_id: int, metric_id: int, value: int) -> bool:
     with get_connection() as conn:
         cursor = conn.execute("""
         INSERT INTO entry_values (entry_id, metric_id, value)
         VALUES (?, ?, ?)
         ON CONFLICT(entry_id, metric_id) DO UPDATE SET value = excluded.value
-        """, (entry_id, metric_id, value))
+        """, (entry_id, metric_id, value,))
         conn.commit()
-
-def get_entry_with_values(entry_id: int) -> dict | None:
-    """Get an entry with its associated metric values"""
+        return cursor.rowcount > 0 
+    
+# einen einzelnen Eintrag mit allen zugehörigen Metrik-Werten abrufen
+def get_entry_with_values(entry_id: int, user_id: int) -> dict | None:
     with get_connection() as conn:
-        cursor = conn.execute("SELECT * FROM entries WHERE id = ?", (entry_id,))
+        cursor = conn.execute("SELECT * FROM entries WHERE id = ? AND user_id = ?", (entry_id, user_id,))
         entry_row = cursor.fetchone()
         if entry_row is None:
             return None
         
+        # alle Metrik-Werte dieses Eintrags per JOIN abrufen
         cursor = conn.execute("""
         SELECT 
             ev.id as entry_value_id,
             m.id as metric_id,
             m.key as metric_key,
-            ev.value as value
+            ev.value as value,
+            u.id as user_id
         FROM entry_values ev
         JOIN metrics m ON m.id = ev.metric_id
-        WHERE ev.entry_id = ?
-        """, (entry_id,))
+        JOIN users u ON u.id = e.user_id
+        JOIN entries e ON e.id = ev.entry_id
+        WHERE ev.entry_id = ? AND e.user_id = ?
+        """, (entry_id, user_id,))
         value_rows = [dict(row) for row in cursor.fetchall()]
         entry = dict(entry_row)
-        entry['values'] = value_rows
+        entry['values'] = value_rows # Metrik-Werte als Liste am Eintrag anhängen
         return entry
 
+# einzelnen Metrik-Wert eines Eintrags löschen
 def delete_entry_value(entry_id: int, metric_id: int) -> bool:
-    """Delete a metric value from an entry"""
     with get_connection() as conn:
         cursor = conn.execute(
             "DELETE FROM entry_values WHERE entry_id = ? AND metric_id = ?",
-            (entry_id, metric_id)
+            (entry_id, metric_id,)
         )
         conn.commit()
         return cursor.rowcount > 0
 
-def delete_entry(entry_id: int) -> bool:
-    """Delete an entry and its associated metric values"""
+# gesamten Eintrag löschen (Metrik-Werte werden per CASCADE automatisch mitgelöscht)
+def delete_entry(entry_id: int, user_id: int) -> bool:
     with get_connection() as conn:
-        cursor = conn.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
+        cursor = conn.execute("DELETE FROM entries WHERE id = ? AND user_id = ?", (entry_id, user_id,))
         conn.commit()
         return cursor.rowcount > 0
 
-
-# ===== NEUE FUNKTIONEN FÜR THERAPY CAT AI =====
-
-def get_latest_entry_metrics(limit: int = 7) -> list[dict]:
-    """
-    Holt die letzten N Einträge mit ihren Metrik-Werten.
-    
-    Args:
-        limit: Anzahl der letzten Einträge (Standard: 7)
-    
-    Returns:
-        Liste von Dictionaries mit Entry-Daten und Metrik-Werten
-    """
+# die neuesten Einträge eines Nutzers mit ihren Metriken abrufen
+def get_latest_entry_metrics(user_id: int, limit: int | None = None) -> list[dict]:
     with get_connection() as conn:
         cursor = conn.execute("""
         SELECT 
             e.id as entry_id,
             e.date,
             e.note,
-            e.created_by
-        FROM entries e
+            e.created_by,
+            e.user_id
+        FROM entries e WHERE e.user_id = ?
         ORDER BY e.date DESC
         LIMIT ?
-        """, (limit,))
+        """, (user_id, limit,))
         
         entries = []
         for row in cursor.fetchall():
             entry = dict(row)
-            
-            # Hole Metrik-Werte für diesen Entry
+            # für jeden Eintrag die zugehörigen Metrik-Werte nachladen
             cursor2 = conn.execute("""
             SELECT 
                 m.key as metric_key,
@@ -228,22 +220,14 @@ def get_latest_entry_metrics(limit: int = 7) -> list[dict]:
             WHERE ev.entry_id = ?
             """, (entry['entry_id'],))
             
-            entry['metrics'] = {row2['metric_key']: row2['metric_value'] for row2 in cursor2.fetchall()}
+            entry['metrics'] = {row2['metric_key']: row2['metric_value'] for row2 in cursor2.fetchall()} # Metriken als Dict {key: value}
             entries.append(entry)
         
         return entries
 
-
-def get_todays_metrics() -> dict:
-    """
-    Holt alle Metrik-Werte für heute.
-    
-    Returns:
-        Dictionary mit Metrik-Keys und deren Werten
-    """
-    from datetime import date
+# alle Metrik-Werte des heutigen Eintrags eines Nutzers abrufen
+def get_todays_metrics(user_id: int) -> dict:
     today = str(date.today())
-    
     with get_connection() as conn:
         cursor = conn.execute("""
         SELECT 
@@ -252,263 +236,83 @@ def get_todays_metrics() -> dict:
         FROM entry_values ev
         JOIN metrics m ON ev.metric_id = m.id
         JOIN entries e ON ev.entry_id = e.id
-        WHERE e.date = ?
-        """, (today,))
-        
+        WHERE e.date = ? AND e.user_id = ?
+        """, (today, user_id,))
+
         return {row['key']: row['value'] for row in cursor.fetchall()}
 
-
-def get_metrics_raw_data(days: int = 30) -> dict:
-    """
-    Sammelt Rohdaten aller Metriken für einen Zeitraum.
-    Zur Verwendung für eigene Analyseverfahren und Gewichtungen.
-    
-    Args:
-        days: Anzahl der Tage zur Analyse (Standard: 30)
-    
-    Returns:
-        Dictionary mit Metrik-Keys, ihre Werte über Zeit und Statistiken
-    """
-    from datetime import date, timedelta
-    start_date = str(date.today() - timedelta(days=days))
-    
+# Rohdaten aller Metriken für einen bestimmten Zeitraum abrufen (für Diagramme/Auswertungen)
+def get_metrics_raw_data(user_id: int, days: int | None = None) -> dict:
+    start_date = str(date.today() - timedelta(days=days)) # Startdatum berechnen
     with get_connection() as conn:
         cursor = conn.execute("""
         SELECT 
             m.key,
             ev.value,
-            e.date
+            e.date,
+            e.created_by
         FROM entry_values ev
         JOIN metrics m ON ev.metric_id = m.id
         JOIN entries e ON ev.entry_id = e.id
-        WHERE e.date >= ?
+        WHERE e.date >= ? AND e.user_id = ?
         ORDER BY m.key, e.date
-        """, (start_date,))
+        """, (start_date, user_id,)) 
         
-        # Strukturiere die Daten nach Metrik-Keys
+        # Ergebnis gruppiert nach Metrik-Key aufbauen: {key: {values: [...], dates: [...]}}
         data = {}
         for row in cursor.fetchall():
             key = row['key']
             if key not in data:
                 data[key] = {'values': [], 'dates': []}
             data[key]['values'].append(row['value'])
-            data[key]['dates'].append(row['date'])
+            data[key]['dates'].append(row['date']) 
         
         return data
 
-
-# ===== MULTI-USER & ENTRY MANAGEMENT FUNKTIONEN =====
-
-def list_users() -> list[str]:
-    """
-    Gibt eine Liste aller Nutzer zurück, die Entries erstellt haben.
-    
-    Returns:
-        Liste von eindeutigen created_by Werten
-    """
+# alle einzigartigen "created_by"-Werte eines Nutzers abrufen (für Filterlisten)
+def list_created_by(user_id: int) -> list[str]:
     with get_connection() as conn:
         cursor = conn.execute("""
-        SELECT DISTINCT created_by FROM entries WHERE created_by IS NOT NULL
+        SELECT DISTINCT created_by FROM entries WHERE created_by IS NOT NULL AND user_id = ?
         ORDER BY created_by
-        """)
+        """, (user_id,))
         return [row['created_by'] for row in cursor.fetchall()]
 
-
-# [21.04.2026] - User-gefilterte Entry-Abfrage mit Multi-User Support
-def get_user_entries(created_by: str, limit: int | None = None) -> list[dict]:
-    """
-    Holt alle Einträge eines spezifischen Nutzers mit ihren Metrik-Werten.
-    MULTI-USER: Filtert automatisch nach User & berücksichtigt Standard-User (NULL entries).
-    
-    Args:
-        created_by: Der Nutzer-Identifier
-        limit: Optional - maximale Anzahl der Einträge (Standard: alle)
-    
-    Returns:
-        Liste von Dictionaries mit Entry-Daten und Metriken, sortiert nach Datum (DESC)
-    """
+# Benutzer anhand von Username und PIN einloggen, gibt die user_id zurück oder None
+def login_user(username: str, pin: int):
     with get_connection() as conn:
-        # [21.04.2026] SQL-Query mit User-Filterung:
-        # - Gibt Entries des Users zurück
-        # - Gibt auch NULL-Entries zurück wenn User = 'Standard' (backward compatible)
-        sql = """
-        SELECT 
-            e.id as entry_id,
-            e.date,
-            e.note,
-            e.created_by
-        FROM entries e
-        WHERE e.created_by = ? OR (e.created_by IS NULL AND ? = 'Standard')
-        ORDER BY e.date DESC
-        """
-        # [21.04.2026] Holt die letzten N Einträge eines spezifischen Nutzers
-        if limit:
-            sql += " LIMIT ?"
-            params = (created_by, created_by, limit)
-        else:
-            params = (created_by, created_by)
-        
-        cursor = conn.execute(sql, params)
-        entries = []
-        
-        for row in cursor.fetchall():
-            entry = dict(row)
-            
-            # [21.04.2026] Hole Metrik-Werte für diesen Entry
-            cursor2 = conn.execute("""
-            SELECT 
-                m.id as metric_id,
-                m.key as metric_key,
-                ev.value as metric_value
-            FROM entry_values ev
-            JOIN metrics m ON ev.metric_id = m.id
-            WHERE ev.entry_id = ?
-            """, (entry['entry_id'],))
-            
-            entry['metrics'] = {row2['metric_key']: row2['metric_value'] for row2 in cursor2.fetchall()}
-            entries.append(entry)
-        
-        return entries
+        result = conn.execute(
+            "SELECT id FROM users WHERE username = ? AND pin = ?",
+            (username, pin)
+        ).fetchone()
+    if result:
+        return result[0]
+    return None
 
-
-def get_entry_with_metrics(entry_id: int, created_by: str | None = None) -> dict | None:
-    """
-    Holt einen einzelnen Entry mit allen seinen Metrik-Werten.
-    SICHERHEIT: Kann optional überprüfen, ob dieser Entry vom korrekten User stammt.
-    
-    Args:
-        entry_id: Die ID des Entries
-        created_by: Optional - überprüfe ob dieser Entry von diesem User stammt
-    
-    Returns:
-        Dictionary mit Entry-Daten und Metriken, oder None wenn nicht gefunden
-    """
+# neuen Benutzer registrieren; gibt False zurück wenn der Username bereits vergeben ist
+def register_user(username: str, pin: int) -> bool:
     with get_connection() as conn:
-        if created_by:
-            # Sicherheits-Check: User darf nur auf eigene Entries zugreifen
-            cursor = conn.execute("""
-            SELECT id, date, note, created_by 
-            FROM entries 
-            WHERE id = ? AND (created_by = ? OR (created_by IS NULL AND ? = 'Standard'))
-            """, (entry_id, created_by, created_by))
-        else:
-            cursor = conn.execute("""
-            SELECT id, date, note, created_by 
-            FROM entries 
-            WHERE id = ?
-            """, (entry_id,))
-        
-        entry_row = cursor.fetchone()
-        if not entry_row:
-            return None
-        
-        entry = dict(entry_row)
-        
-        # Hole Metrik-Werte
-        cursor = conn.execute("""
-        SELECT 
-            m.id as metric_id,
-            m.key as metric_key,
-            ev.value as metric_value
-        FROM entry_values ev
-        JOIN metrics m ON ev.metric_id = m.id
-        WHERE ev.entry_id = ?
-        """, (entry_id,))
-        
-        entry['metrics'] = {row['metric_key']: row['metric_value'] for row in cursor.fetchall()}
-        return entry
+        try:
+            conn.execute(
+                "INSERT INTO users (username, pin) VALUES (?, ?)",
+                (username, pin)
+            )
+            conn.commit()
+            return True
+        except Exception:
+            return False
 
-
-def get_user_todays_metrics(created_by: str) -> dict:
-    """
-    Holt die heutigen Metrik-Werte eines spezifischen Nutzers.
-    
-    Args:
-        created_by: Der Nutzer-Identifier
-        
-    Returns:
-        Dictionary mit Metrik-Keys und deren Werten für heute
-    """
-    from datetime import date
-    today = str(date.today())
-    
+# Benutzername eines bestehenden Nutzers ändern
+def update_username(user_id: int, new_username: str) -> bool:
     with get_connection() as conn:
-        cursor = conn.execute("""
-        SELECT 
-            m.key,
-            ev.value
-        FROM entry_values ev
-        JOIN metrics m ON ev.metric_id = m.id
-        JOIN entries e ON ev.entry_id = e.id
-        WHERE e.date = ? AND (e.created_by = ? OR (e.created_by IS NULL AND ? = 'Standard'))
-        """, (today, created_by, created_by))
-        
-        return {row['key']: row['value'] for row in cursor.fetchall()}
+        try:
+            cursor = conn.execute(
+                "UPDATE users SET username = ? WHERE id = ?",
+                (new_username, user_id)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception:
+            return False # schlägt fehl wenn der neue Username bereits vergeben ist
 
-
-def get_user_metrics_raw_data(created_by: str, days: int = 30) -> dict:
-    """
-    Sammelt Rohdaten aller Metriken für einen Nutzer über einen Zeitraum.
-    
-    Args:
-        created_by: Der Nutzer-Identifier
-        days: Anzahl der Tage zur Analyse (Standard: 30)
-    
-    Returns:
-        Dictionary mit Metrik-Keys, ihre Werte über Zeit für diesen User
-    """
-    from datetime import date, timedelta
-    start_date = str(date.today() - timedelta(days=days))
-    
-    with get_connection() as conn:
-        cursor = conn.execute("""
-        SELECT 
-            m.key,
-            ev.value,
-            e.date
-        FROM entry_values ev
-        JOIN metrics m ON ev.metric_id = m.id
-        JOIN entries e ON ev.entry_id = e.id
-        WHERE e.date >= ? AND (e.created_by = ? OR (e.created_by IS NULL AND ? = 'Standard'))
-        ORDER BY m.key, e.date
-        """, (start_date, created_by, created_by))
-        
-        # Strukturiere die Daten nach Metrik-Keys
-        data = {}
-        for row in cursor.fetchall():
-            key = row['key']
-            if key not in data:
-                data[key] = {'values': [], 'dates': []}
-            data[key]['values'].append(row['value'])
-            data[key]['dates'].append(row['date'])
-        
-        return data
-    from datetime import date, timedelta
-    start_date = str(date.today() - timedelta(days=days))
-    
-    with get_connection() as conn:
-        cursor = conn.execute("""
-        SELECT 
-            m.key,
-            ev.value,
-            e.date
-        FROM entry_values ev
-        JOIN metrics m ON ev.metric_id = m.id
-        JOIN entries e ON ev.entry_id = e.id
-        WHERE e.created_by = ? AND e.date >= ?
-        ORDER BY m.key, e.date
-        """, (created_by, start_date))
-        
-        # Strukturiere die Daten nach Metrik-Keys
-        data = {}
-        for row in cursor.fetchall():
-            key = row['key']
-            if key not in data:
-                data[key] = {'values': [], 'dates': []}
-            data[key]['values'].append(row['value'])
-            data[key]['dates'].append(row['date'])
-        
-        return data
-
-
-init_db()
+init_db() # Datenbank beim Import direkt initialisieren
