@@ -166,8 +166,8 @@ def get_entry_with_values(entry_id: int, user_id: int) -> dict | None:
             u.id as user_id
         FROM entry_values ev
         JOIN metrics m ON m.id = ev.metric_id
-        JOIN users u ON u.id = e.user_id
         JOIN entries e ON e.id = ev.entry_id
+        JOIN users u ON u.id = e.user_id
         WHERE ev.entry_id = ? AND e.user_id = ?
         """, (entry_id, user_id,))
         value_rows = [dict(row) for row in cursor.fetchall()]
