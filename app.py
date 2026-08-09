@@ -5,15 +5,13 @@ from seed_metrics import seed_metrics
 # hinweis import key für freunde
 from user_key_config import load_key, save_key
 from key_popup import key_popup
-
-
 # selbst erstellte Methoden importieren
 from db import (
     create_entry, delete_entry, delete_entry_value, get_entry_with_values,
     init_db, list_entries, list_metrics, set_entry_value, update_entry,update_username
     )
 from user_config import print_config_info, login_user, register_new_user, get_saved_username, save_config, save_username
-from test_gemini import initialise_client, therapy_cat_general_chat, get_client, validate_key
+from test_gemini import initialise_client, therapy_cat_general_chat, get_client
 import tkinter.messagebox as messagebox
 
 # Hauptklasse der Anwendung, erbt von ctk.CTk für die GUI
@@ -275,7 +273,6 @@ class JournalApp(ctk.CTk):
         key = load_key()
         if key:
             initialise_client(key)
-            # Hinweis: validate_key() macht einen zusätzlichen API-Call.
             # Um Tokenverbrauch zu minimieren, öffnen wir den Chat direkt.
             self._show_cat_chat_dialog()
         else:

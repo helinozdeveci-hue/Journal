@@ -21,9 +21,7 @@ def get_client():
 MODEL = "gemini-3.5-flash"
 MODEL_FALLBACKS = ("gemini-3-flash-preview", "gemini-flash-latest")
 
-# Very small token budget to keep costs low and avoid unnecessary usage.
-MAX_OUTPUT_TOKENS = 150
-MAX_PROMPT_CHARS = 220
+
 
 # System-Prompt der Therapie-Katze: OPTIMIERT für minimale Token-Nutzung
 # Kurz, prägnant, effektiv - 60 Tokens statt 200!
@@ -79,7 +77,6 @@ def _generate_with_fallbacks(full_prompt: str):
                         )
                     ],
                     config=types.GenerateContentConfig(
-                        max_output_tokens=MAX_OUTPUT_TOKENS,
                         thinking_config=types.ThinkingConfig(thinking_budget=0),
                     ),
                 )
@@ -103,28 +100,6 @@ def _generate_with_fallbacks(full_prompt: str):
 
     raise RuntimeError("Gemini-Anfrage fehlgeschlagen ohne detaillierte Fehlermeldung.")
 
-def validate_key(max_output_tokens: int = 8) -> bool:
-    """
-    Führt einen sehr kleinen Test-Request aus, um zu prüfen, ob der geladene Key
-    grundsätzlich Anfragen ausführen darf und nicht sofort wegen Quota/Unauthorized
-    abgewiesen wird. Gibt True zurück wenn alles ok ist oder wirft eine RuntimeError
-    mit klassifizierter Meldung.
-    """
-    client = _require_client()
-    try:
-        response = client.models.generate_content(
-            model=MODEL,
-            contents=[
-                types.Content(
-                    role="user",
-                    parts=[types.Part.from_text(text="Kurzer Key-Test")],
-                )
-            ],
-            config={"max_output_tokens": max_output_tokens},
-        )
-        return True
-    except Exception as e:
-        raise RuntimeError(_classify_gemini_error(e)) from e
 
 # alle Journaleinträge eines Nutzers als lesbaren Text aufbereiten
 # TODO: ZUKÜNFTIG - Datenbankzugriff wird später implementiert wenn die Metrik-Integration vollendet ist
@@ -395,8 +370,7 @@ def therapy_cat_general_chat(created_by: str, user_message: str) -> str:
         Antwort der Therapie-Katze als String
     """
     safe_created_by = str(created_by or "").strip()[:40]
-    safe_user_message = str(user_message or "").strip()[:MAX_PROMPT_CHARS]
-
+    safe_user_message = str(user_message or "").strip()
     # Minimaler, optimierter Prompt
     full_prompt = f"""{THERAPY_CAT_SYSTEM_INSTRUCTION}
 
